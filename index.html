@@ -249,6 +249,10 @@ body.hablando .hero .reactor{animation:latido 1.1s ease-in-out infinite}
 #mic-st.off{color:var(--mute)}
 body.pensando .hero .reactor .sp3{animation-duration:1.2s}
 .setup{display:flex;flex-direction:column;gap:10px;width:100%;text-align:left}
+/* aviso discreto para encender el micrófono */
+.toque{position:fixed;left:12px;right:12px;bottom:calc(86px + env(safe-area-inset-bottom));z-index:58;max-width:520px;margin:0 auto;padding:10px 14px;text-align:center;
+font:700 12px var(--display);letter-spacing:.14em;text-transform:uppercase;color:var(--amber);background:rgba(26,16,0,.94);border:1px solid var(--amber);box-shadow:var(--glow-a);animation:blink 2.2s steps(2) infinite}
+.toque[hidden]{display:none}
 /* velo hasta decir el código */
 .num,.sv,.core .big,.tile .val,.debt .amt,.sum .v,.stat .v,.disp-total,.yr-big,.bars,.log td,.hero-side .kv span:last-child{transition:filter .7s ease,opacity .7s ease}
 body.velado .num,body.velado .sv,body.velado .core .big,body.velado .tile .val,body.velado .debt .amt,body.velado .sum .v,body.velado .stat .v,body.velado .disp-total,body.velado .yr-big,body.velado .bars,body.velado .log td,body.velado input{filter:blur(9px);user-select:none}
@@ -297,6 +301,7 @@ body.velado .cand{display:block;position:fixed;left:0;right:0;top:0;z-index:55;p
 </div>
 </header>
 <div class="hudbar"><span class="on">Sistema en línea</span><span id="mic-st" class="off">Micrófono apagado</span><span id="hud-rates">—</span><span id="hud-clock">—</span><span style="display:flex;gap:6px"><button type="button" class="vbtn" id="voz-rep">▶ Resumen</button><button type="button" class="vbtn" id="voz-tog">Voz: on</button></span></div>
+<div class="toque" id="toque" hidden>Toca la pantalla para que te escuche</div>
 <div class="cand" id="cand">Datos protegidos · diga su código de acceso</div>
 <div class="vcap" id="voz-cap" hidden aria-live="polite"><span class="vwave" aria-hidden="true"><i></i><i></i><i></i><i></i></span><p id="voz-txt"></p></div>
 <nav class="mnav" aria-label="Cambiar de mes">
@@ -928,6 +933,7 @@ return es.filter(function(v){ return hombres.test(v.name); })[0]||es[0]||null;
 var cap=$('voz-cap'), ctx=$('voz-txt');
 function callar(){ if(window.speechSynthesis) speechSynthesis.cancel(); document.body.classList.remove('hablando'); cap.hidden=true; }
 function hablar(frases){
+if(window.speechSynthesis && speechSynthesis.speaking && frases && frases[0] && /Buen[oa]s (días|tardes|noches)/.test(frases[0])) return;
 if(!window.speechSynthesis||!frases.length||st.voz===false) return;
 speechSynthesis.cancel(); var v=vozElegida();
 frases.forEach(function(f,i){
@@ -1191,8 +1197,7 @@ enCurso=false; t2.textContent='IDENTIFÍCATE';
 s2.innerHTML='<p class="foot" style="margin-top:10px">Toca la pantalla y mírame otra vez.</p>';
 });
 }
-if(!b2.__lig){ b2.__lig=true; b2.addEventListener('click',function(){ if(document.body.classList.contains('velado')||!b2.classList.contains('off')) reintento(); }); }
-setTimeout(reintento,200);
+if(!b2.__lig){ b2.__lig=true; b2.addEventListener('click',function(){ if(!b2.classList.contains('off')) reintento(); }); }
 }
 var fb=$('fid-btn');
 if(window.__HOSTED && hayFaceId() && fb){
@@ -1225,10 +1230,15 @@ if(st.voz!==false && !saludado){ saludado=true; hablar([saludoHora()+', señor K
 } else if(st.voz!==false && !saludado){ saludado=true; hablar(SAL); }
 }
 function pedirToque(){
-bt.classList.remove('off'); bt.classList.add('ready');
-document.querySelector('.boot-t').textContent='TOCA PARA CONTINUAR';
-$('boot-sub').textContent='El iPhone pide un toque para encender el micrófono';
-bt.addEventListener('click',function(){ bt.classList.add('off'); window.__hablo=false; arrancarVoz(); },{once:true});
+var av=$('toque'); if(!av) return;
+av.hidden=false;
+var go=function(){
+av.hidden=true;
+document.removeEventListener('click',go,true); document.removeEventListener('touchend',go,true);
+window.__hablo=false; micIniciar();
+if(st.voz!==false && !saludado){ saludado=true; hablar(pideCod?[saludoHora()+', señor Keyner.','Dígame su código de acceso para mostrarle los números.']:SAL); }
+};
+document.addEventListener('click',go,true); document.addEventListener('touchend',go,true);
 }
 window.__hablo=false;
 bt.classList.add('off');
@@ -1258,7 +1268,14 @@ sb2.innerHTML='<p class="foot" style="margin-top:10px">Toca la pantalla y míram
 });
 }
 bt0.addEventListener('click',intentarCara);
-setTimeout(function(){ intentarCara(); },200);
+var salir=document.createElement('button'); salir.type='button'; salir.className='vbtn'; salir.style.marginTop='14px'; salir.textContent='Entrar solo con el código';
+sb2.appendChild(salir);
+salir.addEventListener('click',function(ev){
+ev.stopPropagation();
+if(LOCK && LOCK.prf){ alert('Para quitar el Face ID necesito reconocerte una vez. Toca la pantalla, mírame y luego quítalo desde la tarjeta Datos del Drive y tasas.'); return; }
+try{ localStorage.removeItem('mi_lock'); }catch(e){}
+location.reload();
+});
 } else if(window.__HOSTED){ var b3=document.getElementById('boot'); if(b3) b3.addEventListener('dblclick',function(){ if(window.__olvidar) window.__olvidar(); }); }
 if(window.__HOSTED && !window.__API_OK){
 document.querySelector('.boot-t').textContent='CONECTAR';
