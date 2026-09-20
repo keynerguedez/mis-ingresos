@@ -931,19 +931,19 @@ for(var i=0;i<pref.length;i++){ var m=es.filter(function(v){ return v.lang.repla
 return es.filter(function(v){ return hombres.test(v.name); })[0]||es[0]||null;
 }
 var cap=$('voz-cap'), ctx=$('voz-txt');
-function callar(){ if(window.speechSynthesis) speechSynthesis.cancel(); document.body.classList.remove('hablando'); cap.hidden=true; finVoz=Date.now(); setTimeout(retomarMic,200); }
+function callar(){ if(window.speechSynthesis) speechSynthesis.cancel(); document.body.classList.remove('hablando'); cap.hidden=true; finVoz=Date.now(); }
 var pausadoPorVoz=false;
 function soltarMic(){ if(rec){ pausadoPorVoz=true; try{ rec.abort(); }catch(_){} } }
 function retomarMic(){ pausadoPorVoz=false; if(micOn){ try{ rec&&rec.start(); }catch(e){ try{ rec=null; micOn=false; micIniciar(); }catch(_){} } } }
 function hablar(frases){
 if(window.speechSynthesis && speechSynthesis.speaking && frases && frases[0] && /Buen[oa]s (días|tardes|noches)/.test(frases[0])) return;
 if(!window.speechSynthesis||!frases.length||st.voz===false) return;
-speechSynthesis.cancel(); soltarMic(); var v=vozElegida();
+speechSynthesis.cancel(); var v=vozElegida();
 frases.forEach(function(f,i){
 var u=new SpeechSynthesisUtterance(f.replace(/Keyner/g,'Kéiner').replace(/USDT/g,'dólares'));
 u.lang=v?v.lang:'es-MX'; if(v) u.voice=v; u.rate=1.0; u.pitch=0.9; u.volume=1;
 u.onstart=function(){ window.__hablo=true; document.body.classList.add('hablando'); cap.hidden=false; ctx.textContent=f; dicho=f; };
-if(i===frases.length-1){ u.onend=u.onerror=function(){ finVoz=Date.now(); setTimeout(retomarMic,250); setTimeout(function(){ if(!speechSynthesis.speaking){ document.body.classList.remove('hablando'); cap.hidden=true; } },900); }; }
+if(i===frases.length-1){ u.onend=u.onerror=function(){ finVoz=Date.now(); setTimeout(function(){ if(!speechSynthesis.speaking){ document.body.classList.remove('hablando'); cap.hidden=true; } },900); }; }
 speechSynthesis.speak(u);
 });
 }
@@ -1127,7 +1127,7 @@ if(faltaTerminar(nuevo)){ silT=setTimeout(function(){ consumido=full.length; pro
 consumido=full.length; procesar(nuevo);
 },esperaMs());
 };
-rec.onend=function(){ consumido=0; if(micOn && !pausadoPorVoz) setTimeout(function(){ try{ rec.start(); }catch(_){} },250); };
+rec.onend=function(){ consumido=0; if(micOn) setTimeout(function(){ try{ rec.start(); }catch(_){} },250); };
 rec.onerror=function(e){ if(/not-allowed|service-not-allowed|audio-capture/.test(e.error)){ micOn=false; rec=null; micEstado('Micrófono bloqueado · toca la pantalla o escribe en Asistente','off'); } };
 micOn=true;
 try{ rec.start(); micListo(); }catch(err){ micOn=false; rec=null; micEstado('No pude abrir el micrófono','off'); }
@@ -1184,6 +1184,11 @@ dsp.addEventListener('change',function(){ st.despierta=dsp.checked; save(); if(d
 var cl=$('clave'); cl.value=st.clave||''; cl.addEventListener('input',function(){ st.clave=cl.value.trim(); save(); micListo(); });
 var sc=$('sinclave'); sc.checked=st.sinClave!==false; sc.addEventListener('change',function(){ st.sinClave=sc.checked; save(); micListo(); });
 function volverConCara(){
+var bv=$('boot'), tv=document.querySelector('.boot-t'), sv=$('boot-sub');
+bv.classList.remove('off'); bv.classList.add('ready');
+tv.textContent='TOCA PARA CONTINUAR'; sv.textContent=st.codigoHash?'Toca y dime tu código de acceso':'Sistema listo';
+bv.addEventListener('click',function(){ bv.classList.add('off'); window.__hablo=false; saludado=false; arrancarVoz(); },{once:true});
+return;
 var b2=$('boot'), t2=document.querySelector('.boot-t'), s2=$('boot-sub');
 b2.classList.remove('off'); b2.classList.add('ready');
 t2.textContent='IDENTIFÍCATE'; s2.innerHTML='<p class="foot" style="margin-top:10px">Toca la pantalla y mírame.</p>';
@@ -1232,21 +1237,12 @@ micEstado('Esperando el código','escucha');
 if(st.voz!==false && !saludado){ saludado=true; hablar([saludoHora()+', señor Keyner.','Dígame su código de acceso para mostrarle los números.']); }
 } else if(st.voz!==false && !saludado){ saludado=true; hablar(SAL); }
 }
-function pedirToque(){
-var av=$('toque'); if(!av) return;
-av.hidden=false;
-var go=function(){
-av.hidden=true;
-document.removeEventListener('click',go,true); document.removeEventListener('touchend',go,true);
-window.__hablo=false; micIniciar();
-if(st.voz!==false && !window.__hablo){ saludado=true; hablar(pideCod?[saludoHora()+', señor Keyner.','Dígame su código de acceso para mostrarle los números.']:SAL); }
-};
-document.addEventListener('click',go,true); document.addEventListener('touchend',go,true);
-}
+function pedirToque(){ var av=$('toque'); if(av) av.hidden=true; }
 window.__hablo=false;
-bt.classList.add('off');
-arrancarVoz();
-setTimeout(function(){ if(!micOn || (st.voz!==false && !window.__hablo)) pedirToque(); },900);
+bt.classList.add('ready');
+document.querySelector('.boot-t').textContent='TOCA PARA INICIAR';
+$('boot-sub').textContent=pideCod?'Toca y dime tu código de acceso':'Sistema listo';
+bt.addEventListener('click',function(){ bt.classList.add('off'); arrancarVoz(); },{once:true});
 }
 function arranca(){
 if(window.__diag) window.__diag('Pidiendo datos al servidor…');
