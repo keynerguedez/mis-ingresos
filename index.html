@@ -301,7 +301,7 @@ body.velado .cand{display:block;position:fixed;left:0;right:0;top:0;z-index:55;p
 </div>
 </header>
 <div class="hudbar"><span class="on">Sistema en línea</span><span id="mic-st" class="off">Micrófono apagado</span><span id="hud-rates">—</span><span id="hud-clock">—</span><span style="display:flex;gap:6px"><button type="button" class="vbtn" id="voz-rep">▶ Resumen</button><button type="button" class="vbtn" id="voz-tog">Voz: on</button></span></div>
-<div class="toque" id="toque" hidden>Toca la pantalla para que te escuche</div>
+<div class="toque" id="toque" hidden>Toca en cualquier parte para oírme</div>
 <div class="cand" id="cand">Datos protegidos · diga su código de acceso</div>
 <div class="vcap" id="voz-cap" hidden aria-live="polite"><span class="vwave" aria-hidden="true"><i></i><i></i><i></i><i></i></span><p id="voz-txt"></p></div>
 <nav class="mnav" aria-label="Cambiar de mes">
@@ -535,7 +535,7 @@ window.__cred={ get tok(){ return TOK; }, set tok(v){ TOK=v; window.__API_OK=!!(
 olvidaTok:function(){ try{ localStorage.removeItem('mi_tok'); }catch(e){} } };
 })();
 /* ===== Face ID (passkey del dispositivo) ===== */
-var LOCK=null; try{ LOCK=JSON.parse(localStorage.getItem('mi_lock')||'null'); }catch(e){}
+var LOCK=null; try{ localStorage.removeItem('mi_lock'); }catch(e){}   // Face ID desactivado: solo código hablado
 function b64u(b){ var s=btoa(String.fromCharCode.apply(null,new Uint8Array(b))); return s.replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,''); }
 function ub64(t){ t=t.replace(/-/g,'+').replace(/_/g,'/'); var b=atob(t), u=new Uint8Array(b.length); for(var i=0;i<b.length;i++) u[i]=b.charCodeAt(i); return u; }
 function rnd(n){ var u=new Uint8Array(n); crypto.getRandomValues(u); return u; }
@@ -1191,7 +1191,7 @@ t2.textContent='MIRÁNDOTE'; s2.innerHTML='<p class="foot" style="margin-top:10p
 desbloquear().then(function(){
 enCurso=false; b2.classList.add('off'); t2.textContent='IDENTIDAD CONFIRMADA';
 window.__hablo=false; arrancarVoz();
-setTimeout(function(){ if(!micOn || (st.voz!==false && !window.__hablo)) pedirToque(); },1400);
+setTimeout(function(){ if(!micOn || (st.voz!==false && !window.__hablo)) pedirToque(); },900);
 }).catch(function(){
 enCurso=false; t2.textContent='IDENTIFÍCATE';
 s2.innerHTML='<p class="foot" style="margin-top:10px">Toca la pantalla y mírame otra vez.</p>';
@@ -1200,7 +1200,7 @@ s2.innerHTML='<p class="foot" style="margin-top:10px">Toca la pantalla y mírame
 if(!b2.__lig){ b2.__lig=true; b2.addEventListener('click',function(){ if(!b2.classList.contains('off')) reintento(); }); }
 }
 var fb=$('fid-btn');
-if(window.__HOSTED && hayFaceId() && fb){
+if(false && fb){
 fb.hidden=false;
 var pintaFid=function(){ fb.textContent=LOCK?'Quitar Face ID':'Proteger con Face ID';
 $('fid-st').textContent=LOCK?(LOCK.prf?'Face ID activo · el código queda cifrado en este iPhone':'Face ID activo en este iPhone'):'Sin protección: cualquiera con el enlace ve tus números'; };
@@ -1243,7 +1243,7 @@ document.addEventListener('click',go,true); document.addEventListener('touchend'
 window.__hablo=false;
 bt.classList.add('off');
 arrancarVoz();
-setTimeout(function(){ if(!micOn || (st.voz!==false && !window.__hablo)) pedirToque(); },1400);
+setTimeout(function(){ if(!micOn || (st.voz!==false && !window.__hablo)) pedirToque(); },900);
 }
 function arranca(){
 if(window.__diag) window.__diag('Pidiendo datos al servidor…');
