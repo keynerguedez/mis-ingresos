@@ -567,9 +567,12 @@ return lock;
 });
 }
 function desbloquear(){
+window.__auth=true;
+setTimeout(function(){ window.__auth=false; },1500);
 var opt={challenge:rnd(32),allowCredentials:[{type:'public-key',id:ub64(LOCK.credId),transports:['internal','hybrid']}],userVerification:'required',timeout:60000,hints:['client-device']};
 if(LOCK.prf) opt.extensions={prf:{eval:{first:SALT}}};
 return navigator.credentials.get({publicKey:opt}).then(function(a){
+window.__auth=false;
 if(!LOCK.prf) return true;
 var r=((a.getClientExtensionResults&&a.getClientExtensionResults())||{}).prf;
 if(!(r&&r.results&&r.results.first)) throw new Error('Face ID no devolvió la llave de cifrado');
@@ -1120,12 +1123,14 @@ rec.onerror=function(e){ if(/not-allowed|service-not-allowed|audio-capture/.test
 micOn=true;
 try{ rec.start(); micListo(); }catch(err){ micOn=false; rec=null; micEstado('No pude abrir el micrófono','off'); }
 }
-var wl=null;
+var wl=null, ocultoEn=0;
+window.__auth=false;
 function pideWake(){ if(st.despierta===false||!navigator.wakeLock||document.hidden) return;
 navigator.wakeLock.request('screen').then(function(s){ wl=s; s.addEventListener('release',function(){ wl=null; }); }).catch(function(){}); }
 function soltarWake(){ if(wl){ try{ wl.release(); }catch(e){} wl=null; } }
 document.addEventListener('visibilitychange',function(){
-if(document.hidden){
+if(window.__auth) return;                       // el cuadro de Face ID no cuenta como salir
+if(document.hidden){ ocultoEn=Date.now();
 if(rec){ micOn=false; try{rec.abort();}catch(_){} rec=null; }
 soltarWake(); micEstado('En pausa','off');
 if(st.codigoHash){ modoCodigo=true; intentos=0; document.body.classList.add('velado'); }
@@ -1133,6 +1138,7 @@ if(window.__HOSTED && LOCK) document.body.classList.add('cerrado');
 }
 else {
 pideWake();
+if(Date.now()-ocultoEn<2500){ document.body.classList.remove('cerrado'); if(!micOn) micIniciar(); return; }
 if(document.body.classList.contains('cerrado')){ document.body.classList.remove('cerrado'); volverConCara(); return; }
 setTimeout(function(){ if(!micOn) micIniciar(); if(!micOn) micEstado('Toca la pantalla para volver a escuchar','off'); },300);
 }
@@ -1209,13 +1215,14 @@ activarFaceId().then(function(l){ pintaFid(); alert(l.prf?'Listo. Tu código que
 }
 var bt=$('boot');
 var pideCod=!!st.codigoHash;
+var saludado=false;
 function arrancarVoz(){
 pideWake(); micIniciar();
 if(pideCod){
 modoCodigo=true; document.body.classList.add('velado');
 micEstado('Esperando el código','escucha');
-if(st.voz!==false) hablar([saludoHora()+', señor Keyner.','Dígame su código de acceso para mostrarle los números.']);
-} else if(st.voz!==false) hablar(SAL);
+if(st.voz!==false && !saludado){ saludado=true; hablar([saludoHora()+', señor Keyner.','Dígame su código de acceso para mostrarle los números.']); }
+} else if(st.voz!==false && !saludado){ saludado=true; hablar(SAL); }
 }
 function pedirToque(){
 bt.classList.remove('off'); bt.classList.add('ready');
