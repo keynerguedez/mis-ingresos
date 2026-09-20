@@ -140,7 +140,17 @@ summary::after{content:"";flex:0 0 auto;width:10px;height:10px;border-right:2px 
 details[open]>summary::after{transform:rotate(45deg)}
 details[open]{box-shadow:0 0 28px rgba(62,232,255,.1),inset 0 0 40px rgba(62,232,255,.06)}
 .dbody{padding:0 20px 18px;display:flex;flex-direction:column;gap:12px}
-details[open]>.dbody{animation:rise .35s both}
+details[open]>.dbody{animation:abrir .34s cubic-bezier(.16,.9,.24,1) both;transform-origin:top center}
+@keyframes abrir{0%{opacity:0;transform:scale(.88) translateY(-10px);filter:blur(3px)}60%{opacity:1;transform:scale(1.012) translateY(0);filter:blur(0)}100%{opacity:1;transform:scale(1)}}
+details[open]{animation:marco .45s ease-out}
+@keyframes marco{0%{box-shadow:0 0 0 rgba(62,232,255,0),inset 0 0 0 rgba(62,232,255,0)}35%{box-shadow:0 0 38px rgba(62,232,255,.4),inset 0 0 50px rgba(62,232,255,.12)}100%{box-shadow:0 0 28px rgba(62,232,255,.1),inset 0 0 40px rgba(62,232,255,.06)}}
+details[open]>.dbody>*{animation:sube .3s cubic-bezier(.2,.9,.25,1) both}
+details[open]>.dbody>*:nth-child(2){animation-delay:.05s}
+details[open]>.dbody>*:nth-child(3){animation-delay:.09s}
+details[open]>.dbody>*:nth-child(n+4){animation-delay:.13s}
+@keyframes sube{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+details[open]>summary::after{filter:drop-shadow(0 0 8px var(--teal))}
+summary:active{background:rgba(62,232,255,.06)}
 .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
 .stat{background:rgba(0,12,22,.7);border:1px solid var(--line);padding:10px 12px;display:flex;flex-direction:column;gap:2px}
 .stat .k{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--mute)}
@@ -239,6 +249,12 @@ body.hablando .hero .reactor{animation:latido 1.1s ease-in-out infinite}
 #mic-st.off{color:var(--mute)}
 body.pensando .hero .reactor .sp3{animation-duration:1.2s}
 .setup{display:flex;flex-direction:column;gap:10px;width:100%;text-align:left}
+/* velo hasta decir el código */
+.num,.sv,.core .big,.tile .val,.debt .amt,.sum .v,.stat .v,.disp-total,.yr-big,.bars,.log td,.hero-side .kv span:last-child{transition:filter .7s ease,opacity .7s ease}
+body.velado .num,body.velado .sv,body.velado .core .big,body.velado .tile .val,body.velado .debt .amt,body.velado .sum .v,body.velado .stat .v,body.velado .disp-total,body.velado .yr-big,body.velado .bars,body.velado .log td,body.velado input{filter:blur(9px);user-select:none}
+body.velado .core .big{filter:blur(16px)}
+body.velado .cand{display:block;position:fixed;left:0;right:0;top:0;z-index:55;padding:10px 16px;text-align:center;font:700 12px var(--display);letter-spacing:.18em;text-transform:uppercase;color:var(--amber);background:rgba(20,12,0,.92);border-bottom:1px solid var(--amber-line);box-shadow:var(--glow-a);animation:blink 2s steps(2) infinite}
+.cand{display:none}
 /* arranque */
 #boot{position:fixed;inset:0;z-index:100;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:radial-gradient(circle at 50% 45%,#06243A,var(--bg) 70%);transition:opacity .7s,visibility .7s}
 #boot.off{opacity:0;visibility:hidden}
@@ -281,6 +297,7 @@ body.pensando .hero .reactor .sp3{animation-duration:1.2s}
 </div>
 </header>
 <div class="hudbar"><span class="on">Sistema en línea</span><span id="mic-st" class="off">Micrófono apagado</span><span id="hud-rates">—</span><span id="hud-clock">—</span><span style="display:flex;gap:6px"><button type="button" class="vbtn" id="voz-rep">▶ Resumen</button><button type="button" class="vbtn" id="voz-tog">Voz: on</button></span></div>
+<div class="cand" id="cand">Datos protegidos · diga su código de acceso</div>
 <div class="vcap" id="voz-cap" hidden aria-live="polite"><span class="vwave" aria-hidden="true"><i></i><i></i><i></i><i></i></span><p id="voz-txt"></p></div>
 <nav class="mnav" aria-label="Cambiar de mes">
 <button type="button" id="m-prev" aria-label="Mes anterior">‹</button>
@@ -327,9 +344,14 @@ body.pensando .hero .reactor .sp3{animation-duration:1.2s}
 <label for="clave">Palabra para llamarlo<input id="clave" type="text" autocomplete="off" placeholder="jarvis"></label>
 <label class="opt"><input id="sinclave" type="checkbox" checked> Responder sin decir la palabra clave</label>
 <label for="espera">Segundos de silencio antes de responder<input id="espera" type="number" inputmode="decimal" step="0.2" min="1" max="6" placeholder="2.2"></label>
+<label for="minutos">Minutos activo tras oír tu frase<input id="minutos" type="number" inputmode="decimal" step="1" min="0" max="120" placeholder="0.25"></label>
 <label class="opt"><input id="despierta" type="checkbox" checked> Mantener la pantalla encendida mientras escucha</label>
 </div>
-<div class="hist-actions"><button type="button" class="av-btn ghost" id="chat-del">Borrar la conversación</button></div>
+<div class="fields">
+<label for="cod">Código de acceso hablado (vacío = sin código)<input id="cod" type="text" inputmode="numeric" autocomplete="off" placeholder="ej. 0228"></label>
+<label class="opt"><span class="foot" id="cod-st"></span></label>
+</div>
+<div class="hist-actions"><button type="button" class="av-btn ghost" id="cod-btn">Guardar código</button><button type="button" class="av-btn ghost" id="chat-del">Borrar la conversación</button></div>
 </div>
 </details>
 <details class="card" id="c-neg">
@@ -838,7 +860,27 @@ var mst=$('mic-st');
 function micEstado(t,cls){ mst.textContent=t; mst.className=cls||''; $('sv-asis').textContent=t; }
 function claveRe(){ var c=(st.clave||'jarvis').toLowerCase().trim(); var alt=c==='jarvis'?'jarvis|járvis|yarvis|jarbis|yarbis|harvis|charvis|chárvis|jervis|yervis|jarvi|garvis':c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 return new RegExp('(^|[^a-záéíóúñü])('+alt+')(?=$|[^a-záéíóúñü])','i'); }
-var dicho='', pendiente=null;
+var dicho='', pendiente=null, modoCodigo=false, intentos=0;
+var NUM={cero:'0',uno:'1',un:'1',una:'1',dos:'2',tres:'3',cuatro:'4',cinco:'5',seis:'6',siete:'7',ocho:'8',nueve:'9',diez:'10',once:'11',doce:'12',trece:'13',catorce:'14',quince:'15',dieciseis:'16',diecisiete:'17',dieciocho:'18',diecinueve:'19',veinte:'20',veintiuno:'21',veintidos:'22',veintitres:'23',veinticuatro:'24',veinticinco:'25',veintiseis:'26',veintisiete:'27',veintiocho:'28',veintinueve:'29',treinta:'30',cuarenta:'40',cincuenta:'50',sesenta:'60',setenta:'70',ochenta:'80',noventa:'90',cien:'100',ciento:'100'};
+function soloDigitos(t){
+var w=String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,' ').split(/\s+/), out='';
+for(var i=0;i<w.length;i++){
+var x=w[i]; if(!x) continue;
+if(/^\d+$/.test(x)){ out+=x; continue; }
+if(NUM[x]!==undefined){
+if(w[i+1]==='y'&&NUM[w[i+2]]!==undefined&&+NUM[x]>=30&&+NUM[x]<=90){ out+=String(+NUM[x]+ +NUM[w[i+2]]); i+=2; continue; }
+out+=NUM[x];
+}
+}
+return out;
+}
+function hashCodigo(t){
+var d=soloDigitos(t)||String(t).toLowerCase().trim();
+return crypto.subtle.digest('SHA-256',new TextEncoder().encode('mi-'+d)).then(function(b){
+return Array.prototype.map.call(new Uint8Array(b),function(x){ return ('0'+x.toString(16)).slice(-2); }).join('');
+});
+}
+function saludoHora(){ var h=new Date().getHours(); return h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches'; }
 function hablandoAhora(){ return (window.speechSynthesis&&speechSynthesis.speaking)||Date.now()-finVoz<700; }
 function norm(t){ return String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
 function esEco(t){
@@ -911,7 +953,7 @@ var sep=separaAcciones(String(r||'No tengo respuesta.'));
 sep.acciones.forEach(function(c){ try{ ejecutar(c); }catch(e){} });
 var txt=sep.texto||'Listo.';
 chatAdd('assistant',txt); CHAT.push({r:'assistant',t:txt,ts:Date.now()}); if(CHAT.length>40) CHAT=CHAT.slice(-40); guardaChat();
-hablar(frases(txt)); atento=Date.now()+14000+txt.length*75; micListo();
+hablar(frases(txt)); atento=Math.max(atento,Date.now()+14000+txt.length*75); micListo();
 if(pendiente){ var sig=pendiente; pendiente=null; setTimeout(function(){ preguntarIA(sig); },400); }
 }).withFailureHandler(function(e){
 ocupado=false; document.body.classList.remove('pensando'); var m='No pude conectarme con el servidor.'; chatAdd('assistant',m+' ('+(e&&e.message||e)+')'); hablar([m]); micListo();
@@ -919,9 +961,29 @@ ocupado=false; document.body.classList.remove('pensando'); var m='No pude conect
 }
 function procesar(txt){
 txt=txt.trim(); if(!txt) return;
+if(modoCodigo){
+$('sv-asis').textContent='Esperando el código';
+var dg=soloDigitos(txt), n=+st.codigoLen||0, cands=[txt];
+if(dg){ cands.push(dg);
+if(n&&dg.length>n){ for(var i=0;i+n<=dg.length&&cands.length<14;i++) cands.push(dg.substr(i,n)); } }
+Promise.all(cands.map(hashCodigo)).then(function(hs){
+if(hs.indexOf(st.codigoHash)>=0){
+modoCodigo=false; intentos=0; $('boot').classList.add('off'); document.body.classList.remove('velado');
+hablar([alAzar(['Acceso concedido.','Confirmado, señor.','Adelante, señor.'])].concat(SAL.slice(1)));
+micListo();
+} else {
+intentos++;
+var d=soloDigitos(txt);
+if(!d && txt.split(/\s+/).length<2) return;
+hablar([intentos>=3?'Ese código no es, señor. Sin él no puedo mostrarle nada.':alAzar(['No coincide. Repítamelo, por favor.','Ese no es el código, señor.'])]);
+}
+});
+return;
+}
 if(/^(c[aá]llate|silencio|basta|detente|para ya)\b/i.test(txt) && window.speechSynthesis && speechSynthesis.speaking){ callar(); return; }
 var m=txt.match(claveRe()), q=null;
-if(m){ q=txt.slice(m.index+m[0].length).replace(/^[\s,.:;!?¡¿]+/,''); if(q.length<3){ hablar([alAzar(['Dígame.','Lo escucho.','¿Sí, señor?','Aquí estoy.'])]); atento=Date.now()+12000; return; } }
+var ventana=Math.max(8000,(parseFloat(st.minutos)||0.25)*60000);
+if(m){ q=txt.slice(m.index+m[0].length).replace(/^[\s,.:;!?¡¿]+/,''); atento=Date.now()+ventana; if(q.length<3){ hablar([alAzar(['Dígame.','Lo escucho.','¿Sí, señor?','Aquí estoy.'])]); return; } }
 else if(Date.now()<atento) q=txt;
 else if(st.sinClave!==false && txt.split(/\s+/).length>=3) q=txt;
 if(!q) return;
@@ -964,8 +1026,17 @@ else { pideWake(); setTimeout(function(){ if(!micOn) micIniciar(); if(!micOn) mi
 document.addEventListener('click',function(ev){ if(!micOn && $('boot').classList.contains('off') && !ev.target.closest('input,button,summary')) micIniciar(); });
 $('ask').addEventListener('submit',function(ev){ ev.preventDefault(); var i=$('ask-in'), q=i.value.trim(); if(!q) return; i.value=''; i.blur(); preguntarIA(q); });
 $('chips').addEventListener('click',function(ev){ var b=ev.target.closest('button'); if(b) preguntarIA(b.textContent); });
+var cdi=$('cod'), cds=$('cod-st');
+cds.textContent=st.codigoHash?'Código activo: al abrir te lo pide y sin él no obedece nada':'Sin código: cualquiera que le hable puede preguntarle';
+$('cod-btn').addEventListener('click',function(){
+var v=cdi.value.trim();
+if(!v){ delete st.codigoHash; save(); cds.textContent='Código quitado'; return; }
+hashCodigo(v).then(function(h){ st.codigoHash=h; st.codigoLen=(soloDigitos(v)||'').length; save(); cdi.value=''; cds.textContent='Código guardado. Se pedirá la próxima vez que abras.'; });
+});
 pintaChat();
 $('chat-del').addEventListener('click',function(){ CHAT=[]; guardaChat(); pintaChat(); });
+var mnt=$('minutos'); mnt.value=(st.minutos!==undefined&&st.minutos!=='')?st.minutos:'';
+mnt.addEventListener('input',function(){ var v=parseFloat(mnt.value); st.minutos=isNaN(v)?'':v; save(); });
 var esp=$('espera'); esp.value=(st.espera!==undefined&&st.espera!=='')?st.espera:'';
 esp.addEventListener('input',function(){ var v=parseFloat(esp.value); st.espera=isNaN(v)?'':v; save(); });
 var dsp=$('despierta'); dsp.checked=st.despierta!==false;
@@ -986,8 +1057,19 @@ activarFaceId().then(function(l){ pintaFid(); alert(l.prf?'Listo. Tu código que
 });
 }
 var bt=$('boot');
-bt.classList.add('ready'); document.querySelector('.boot-t').textContent='TOCA PARA INICIAR'; $('boot-sub').textContent='Sistema listo';
-bt.addEventListener('click',function(){ bt.classList.add('off'); pideWake(); micIniciar(); if(st.voz!==false) hablar(SAL); },{once:true});
+var pideCod=!!st.codigoHash;
+bt.classList.add('ready');
+document.querySelector('.boot-t').textContent=pideCod?'DIGA EL CÓDIGO':'TOCA PARA INICIAR';
+$('boot-sub').textContent=pideCod?'Toque y dígame su código de acceso':'Sistema listo';
+bt.addEventListener('click',function(){
+pideWake(); micIniciar();
+bt.classList.add('off');
+if(pideCod){
+modoCodigo=true; document.body.classList.add('velado');
+micEstado('Esperando el código','escucha');
+if(st.voz!==false) hablar([saludoHora()+', señor Keyner.','Dígame su código de acceso para mostrarle los números.']);
+} else if(st.voz!==false) hablar(SAL);
+},{once:true});
 }
 function arranca(){
 google.script.run.withSuccessHandler(function(d){ try{ start(d); }catch(e){ document.getElementById('boot').classList.add('off'); document.getElementById('eb').textContent='Error: '+e.message; } })
