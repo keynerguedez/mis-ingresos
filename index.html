@@ -1832,7 +1832,7 @@ var full='', ult=e.results[e.results.length-1], fin=!!(ult&&ult.isFinal), conf=u
 for(var i=0;i<e.results.length;i++) full+=e.results[i][0].transcript+' ';
 if(full.length<consumido) consumido=0;
 var nuevo=full.slice(consumido).trim(); if(!nuevo) return;
-if(fin && conf>0 && conf<0.4 && !claveRe().test(nuevo)){ consumido=full.length; $('sv-asis').textContent='No le entendí bien'; return; }   // voz lejana o ruido
+if(!modoCodigo && fin && conf>0 && conf<0.25 && !claveRe().test(nuevo)){ consumido=full.length; $('sv-asis').textContent='No le entendí bien'; return; }   // voz lejana o ruido
 if(hablandoAhora()){
 // Mientras habla solo lo interrumpe su nombre o "para/cállate" (la TV, la gente y su propio eco no lo cortan)
 if(esEco(nuevo) || !(claveRe().test(nuevo) || /^(para|p[aá]rale|c[aá]llate|basta|detente|silencio|stop)\b/i.test(nuevo))){ consumido=full.length; return; }
@@ -1842,7 +1842,8 @@ $('sv-asis').textContent='Oí: '+nuevo;
 clearTimeout(silT);
 var falta=faltaTerminar(nuevo), pregunta=/\?$|^(qu[eé]|cu[aá]nto|cu[aá]l|c[oó]mo|d[oó]nde|cu[aá]ndo|qui[eé]n|por qu[eé]|dime|dame|mu[eé]strame|ponme|abre|cierra|busca|ll[eé]vame|revisa|hazme|arma)\b/i.test(nuevo.trim());
 var ms=esperaMs();
-if(fin&&!falta) ms=Math.min(350,ms);           // el iPhone ya cerró la frase y está completa: enseguida
+if(modoCodigo&&fin) ms=250;                     // el código: apenas termine de decirlo
+else if(fin&&!falta) ms=Math.min(350,ms);           // el iPhone ya cerró la frase y está completa: enseguida
 else if(pregunta&&!falta) ms=Math.min(800,ms);  // suena a pregunta u orden completa: rápido
 else if(falta) ms=ms+900;                      // quedó colgada ("...y el", "...pero"): le da tiempo
 silT=setTimeout(function(){ consumido=full.length; procesar(nuevo); },ms);
@@ -1876,7 +1877,7 @@ setTimeout(function(){ if(!micOn) micIniciar(); if(!micOn) micEstado('Toca la pa
 }
 });
 document.addEventListener('click',function(ev){ if(!micOn && $('boot').classList.contains('off') && !ev.target.closest('input,button,summary')) micIniciar(); });
-$('ask').addEventListener('submit',function(ev){ ev.preventDefault(); var i=$('ask-in'), q=i.value.trim(); if(!q) return; i.value=''; i.blur(); preguntarIA(q); });
+$('ask').addEventListener('submit',function(ev){ ev.preventDefault(); var i=$('ask-in'), q=i.value.trim(); if(!q) return; i.value=''; i.blur(); if(modoCodigo){ procesar(q); return; } preguntarIA(q); });
 $('chips').addEventListener('click',function(ev){ var b=ev.target.closest('button'); if(b) preguntarIA(b.textContent); });
 ['metaPeso','metaGrasa'].forEach(function(k,i){
 var el=$(i===0?'mpeso':'mgrasa'); if(!el) return;
