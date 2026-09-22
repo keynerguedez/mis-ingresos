@@ -154,10 +154,10 @@ body.vista-cre .wrap>*:not(.top):not(.hudbar):not(.tabs):not(#v-cre):not(.vcap):
 .cre-sug button{font-size:12px}
 
 /* ===== TARJETAS HOLOGRÁFICAS: se materializan de la nada, se amplían con los dedos ===== */
-#holo{position:fixed;inset:0;z-index:70;pointer-events:none;overflow:hidden}
-#holo.on{pointer-events:auto}
-#holo .hbg{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,rgba(3,38,54,.55),rgba(2,10,18,.82) 70%);opacity:0;transition:opacity .4s;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
-#holo.on .hbg{opacity:1}
+#tarjetas{position:fixed;inset:0;z-index:70;pointer-events:none;overflow:hidden}
+#tarjetas.on{pointer-events:auto}
+#tarjetas .hbg{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,rgba(3,38,54,.55),rgba(2,10,18,.82) 70%);opacity:0;transition:opacity .4s;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+#tarjetas.on .hbg{opacity:1}
 .hcard{position:absolute;left:50%;top:50%;width:min(92vw,560px);max-height:78vh;transform:translate(-50%,-50%) translate(var(--x,0px),var(--y,0px)) scale(var(--s,1));transform-origin:center;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;transition:opacity .35s,filter .35s}
 .hcard.atras{opacity:.45;filter:blur(1px) brightness(.8);cursor:pointer}
 .hin{display:flex;flex-direction:column;max-height:78vh;background:linear-gradient(160deg,rgba(6,30,48,.92),rgba(3,18,30,.94));border:1px solid var(--teal-line);color:var(--ink);position:relative;overflow:hidden;
@@ -645,7 +645,7 @@ body.velado .cand{display:block;position:fixed;left:0;right:0;top:0;z-index:55;p
 </div>
 </section>
 </div>
-<div id="holo" aria-live="polite"><div class="hbg"></div></div>
+<div id="tarjetas" aria-live="polite"><div class="hbg"></div></div>
 <aside class="pant" id="pantalla" hidden aria-label="Lo que trajo de internet">
 <div class="pant-bar"><span class="pant-t" id="pant-t">En pantalla</span><button type="button" class="vbtn" id="pant-x" aria-label="Cerrar pantalla">Cerrar ✕</button></div>
 <div class="pant-body"><div class="pant-grid" id="pant-grid"></div><div id="pant-fu"></div></div>
@@ -1456,7 +1456,7 @@ ocupado=false; document.body.classList.remove('pensando'); paraMul(); var m='No 
 }
 
 /* ===== TARJETAS HOLOGRÁFICAS ===== */
-var HOLO_L=$('holo'), HCARDS=[];
+var HOLO_L=$('tarjetas'), HCARDS=[];
 function hnum(v){ if(typeof v==='number') return (Math.round(v*100)/100).toLocaleString('es-VE'); return esc(v); }
 function hcuerpo(t){
 var tipo=String(t.tipo||'texto').toLowerCase(), i=0, h='';
