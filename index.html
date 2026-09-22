@@ -1404,6 +1404,17 @@ var MULETILLAS=['Un momento.','Déjeme ver.','Voy.','Reviso eso.','Ajá, veamos.
 var despierto=false, actx=null;
 function seguir(){ var s=parseFloat(st.seguir); return Math.max(4000,Math.min(120000,(isNaN(s)||s<=0?10:s)*1000)); }
 function ventana(){ return seguir(); }
+/* ¿Suena a algo dicho a Jarvis, o es la TV / gente hablando? Se decide aquí, sin gastar IA. */
+var INTENCION=/(\?|^(qu[eé]|cu[aá]nt[oa]s?|cu[aá]l(es)?|c[oó]mo|d[oó]nde|cu[aá]ndo|qui[eé]n|por qu[eé])(?=\s|$)|\b(dime|dame|mu[eé]str|ens[eé]ñ|ponme|pon en|abre|abr[ií]|cierra|cierre|quita|busca|b[uú]scame|revisa|hazme|arma|calcula|actualiza|escanea|bloquea|recoge|lee|l[eé]eme|resumen|resume|compara|comp[aá]rame|ll[eé]vame|ve a|vete a|vamos a|necesito|quiero|puedes|podr[ií]as|ay[uú]dame|expl[ií]came|rec[uué]rdame|anota))/i;
+var TEMA=/\b(novax|nova|robust|caucho|cauchos|casanova|servicio|ventas?|venta|vendedor|cliente|inventario|preventa|profit|mes|meta|deuda|diego|molina|tata|corolla|abono|disponible|tasa|d[oó]lar|euro|binance|usdt|bcv|bol[ií]var|peso|grasa|pulso|sue[ñn]o|cuerpo|salud|tarjeta|pantalla|creaci[oó]n|creaciones|idea|plan|gasto|gastos|ingreso|ingresos|utilidad|margen|saldo|banco|cobrar|pagar|n[uú]mero|cifra|internet|instagram|clima|noticia|precio)\b/i;
+var CORTA=/^(s[ií]|no|dale|ok|okey|listo|ya|claro|eso|exacto|correcto|perfecto|bueno|vale|gracias|cierra|ci[eé]rrala|qu[ií]tala|quita eso|recoge|sigue|contin[uú]a|otra vez|repite|m[aá]s|menos|el primero|el segundo|la otra|esa|ese)[\s.!,]*$/i;
+function esParaJarvis(t,enConversacion){
+t=t.trim(); var n=t.split(/\s+/).length;
+if(n>28) return false;                                     // parrafadas largas = TV o gente
+if(enConversacion){ if(CORTA.test(t)&&n<=4) return true; if(n<=6&&/^(y |pero |entonces |ahora )?(el|la|los|las|de|del|con|para|en)\b/i.test(t)&&!TEMA.test(t)) return false; return INTENCION.test(t)||TEMA.test(t); }
+return n>=2 && INTENCION.test(t) && TEMA.test(t) || (INTENCION.test(t) && n<=8);
+}
+
 function tono(sube){
 try{
 actx=actx||new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==='suspended') actx.resume();
@@ -1430,6 +1441,7 @@ function preguntarIA(q,deVoz){
 if(VISTA==='cre'){ creEnviar(q,deVoz); return; }
 if(ocupado){ pendiente=q; $('sv-asis').textContent='Anotado, respondo enseguida'; return; }
 ocupado=true; var tq=Date.now(); chatAdd('user',q,tq); var nodoQ=$('chat').lastElementChild; CHAT.push({r:'user',t:q,ts:tq}); guardaChat();
+var yaMostro=false; try{ yaMostro=tarjetaRapida(q); }catch(e){}
 document.body.classList.add('pensando'); micEstado('Analizando…','escucha');
 var paraMul=muletillaSiTarda(MULETILLAS,1800);
 google.script.run.withSuccessHandler(function(r){
@@ -1452,7 +1464,7 @@ hablar(frases(txt)); micListo();
 if(pendiente){ var sig=pendiente; pendiente=null; setTimeout(function(){ preguntarIA(sig,true); },400); }
 }).withFailureHandler(function(e){
 ocupado=false; document.body.classList.remove('pensando'); paraMul(); var m='No pude conectarme con el servidor.'; chatAdd('assistant',m+' ('+(e&&e.message||e)+')'); hablar([m]); micListo();
-}).preguntar(q,contexto(),CHAT.slice(-11,-1).map(function(m){ return {r:m.r,t:m.t}; }),!!deVoz);
+}).preguntar((yaMostro?'[ya hay una tarjeta en pantalla con esos datos: coméntalos en dos frases, sin repetir todos los números y sin TARJETA] ':'')+q,contexto(),CHAT.slice(-11,-1).map(function(m){ return {r:m.r,t:m.t}; }),!!deVoz);
 }
 
 /* ===== TARJETAS HOLOGRÁFICAS ===== */
@@ -1524,6 +1536,54 @@ if(HCARDS.length) hfrente(HCARDS[HCARDS.length-1]); else HOLO_L.classList.remove
 }
 function holoCerrar(){ HCARDS.slice().forEach(function(c,k){ setTimeout(function(){ holoQuitar(c); },k*120); }); }
 HOLO_L.querySelector('.hbg').addEventListener('click',function(){ /* tocar el fondo no cierra: solo ✕, voz o tiempo */ despierta(); });
+
+
+/* ===== TARJETAS INSTANTÁNEAS: salen al momento con los datos locales; la IA complementa después ===== */
+function usd(v){ return (Math.round(+v||0)).toLocaleString('es-VE')+' $'; }
+function tarjetaMes(){
+var p=PRO||{}, c=p.cauchos||{}, s=p.servicioCasanova||{};
+return {tipo:'cifras',titulo:'Mes en curso · '+(p.modo||'hasta hoy'),sub:'Solo Robust Tires',items:[
+{k:'Total del mes',v:usd(p.totalUsdt)+' USDT'},{k:'Por día',v:usd(p.porDia),d:Math.round(p.pctMeta||0)+'% de la meta'},
+{k:'Cauchos 1%',v:usd(c.usdt)+' USDT'},{k:'Servicio Casanova',v:usd(s.usdt)+' USDT'},{k:'Disponible para abonar',v:usd(p.disponibleParaAbonar)}]};
+}
+function tarjetaDeudas(){
+var pl=(PRO&&PRO.plan)||{}, d=pl.deudasIniciales||{Diego:100000,SrMolina:4500,Tata:6000}, f=pl.fechasSaldadas||{};
+return {tipo:'tabla',titulo:'Deudas',sub:pl.libreDeDeudas?('Libre de deudas: '+pl.libreDeDeudas):'',cols:['A quién','Monto','Se salda'],filas:[
+['Diego',usd(d.Diego),f.Diego||'—'],['Sr. Molina',usd(d.SrMolina),f.SrMolina||'—'],['Tata',usd(d.Tata),f.Tata||'—'],['Corolla',usd(pl.saldoCorolla),(pl.cuotasCorollaRestantes||0)+' cuotas']]};
+}
+function tarjetaTasas(){
+var t=SRV.tasas||{};
+return {tipo:'cifras',titulo:'Tasas de hoy',sub:t.ts?new Date(t.ts).toLocaleString('es-VE',{timeZone:'America/Caracas',hour:'2-digit',minute:'2-digit',day:'2-digit',month:'short'}):'',items:[
+{k:'Dólar BCV',v:(+g('bcv')||0).toFixed(2)},{k:'Euro BCV',v:(+(t.euro||0)).toFixed(2)},{k:'USDT Binance',v:(+g('usdt')||0).toFixed(2)},{k:'Brecha',v:((+g('usdt')/+g('bcv')-1)*100||0).toFixed(1)+' %'}]};
+}
+function tarjetaHistorial(){
+var hs=(HIST||[]).slice(-6);
+if(!hs.length) return null;
+return {tipo:'barras',titulo:'Últimos meses',unidad:'USDT',serie:hs.map(function(x){ return {n:x.mes,v:Math.round(x.total||0)}; })};
+}
+function tarjetaSalud(){
+var d=(SAL_D||[])[0]; if(!d) return null;
+var it=[]; if(d.peso) it.push({k:'Peso',v:d.peso+' kg'}); if(d.grasa) it.push({k:'Grasa',v:d.grasa+' %'}); if(d.pulso) it.push({k:'Pulso reposo',v:d.pulso}); if(d.sueno) it.push({k:'Sueño',v:d.sueno+' h'}); if(d.pasos) it.push({k:'Pasos',v:d.pasos});
+return it.length?{tipo:'cifras',titulo:'Tu cuerpo',sub:d.fecha||'',items:it}:null;
+}
+var TEMAS=[
+[/\b(deuda|deudas|debo|diego|molina|tata|corolla)\b/i,tarjetaDeudas],
+[/\b(tasa|tasas|d[oó]lar|euro|binance|usdt|bcv)\b/i,tarjetaTasas],
+[/\b(historial|meses anteriores|[uú]ltimos meses|mes pasado)\b/i,tarjetaHistorial],
+[/\b(cuerpo|salud|peso|grasa|pulso|sue[ñn]o)\b/i,tarjetaSalud],
+[/\b(mes|ingresos|n[uú]meros|cifras|cauchos|servicio|casanova|disponible|llevo|gan[oé]|ganancia)\b/i,tarjetaMes]
+];
+var NOVAX_RE=/\b(novax|nova|profit|preventa|inventario|saldos?|bancos?|cobrar|cxc|vendedor(es)?|clientes?|l[ií]neas?|tr[aá]nsito)\b/i;
+/* Devuelve true si mostró algo al instante */
+function tarjetaRapida(q){
+if(!/\b(mu[eé]str|ens[eé]ñ|ponme|pon|dame|ver|quiero ver|saca|abre|despliega|tarjeta|cuadro|tabla|gr[aá]fic|n[uú]meros|cifras|c[oó]mo va|c[oó]mo van|cu[aá]nto)\b/i.test(q)) return false;
+if(NOVAX_RE.test(q)){   // Novax vive en el servidor: se pide sin pasar por la IA
+google.script.run.withSuccessHandler(function(l){ if(l&&l.length) holoMostrar(l,'Novax'); }).tarjetasNovax(q);
+return true;
+}
+for(var i=0;i<TEMAS.length;i++){ if(TEMAS[i][0].test(q)){ var t=null; try{ t=TEMAS[i][1](); }catch(e){} if(t){ holoTarjeta(t,'Mis ingresos'); return true; } } }
+return false;
+}
 
 /* ===== PANTALLA: lo que el asistente trae de internet ===== */
 var PANT_ON=false;
@@ -1745,8 +1805,8 @@ if(hablandoAhora()) callar();                                     // "Jarvis…"
 despertar(8000);
 if(q.length<2){ $('sv-asis').textContent='Lo escucho…'; return; }  // como Alexa: solo el tono, espera la orden
 }
-else if(estaDespierto()) q=txt;                                     // sigue la conversación sin repetir el nombre
-else if(st.libre!==false && txt.split(/\s+/).length>=3) q=txt;      // siempre activo: el servidor descarta lo que no es para él
+else if(estaDespierto()){ if(esParaJarvis(txt,true)) q=txt; else { $('sv-asis').textContent='Ignoré: '+txt.slice(0,40); return; } }
+else if(st.libre!==false){ if(esParaJarvis(txt,false)) q=txt; else { $('sv-asis').textContent='Ignoré: '+txt.slice(0,40); return; } }
 if(!q){ $('sv-asis').textContent='Dígame "'+(st.clave||'jarvis')+'" para hablarme'; return; }
 if(/^(para|p[aá]rale|detente|c[aá]llate|silencio|basta|stop|espera)\b[\s.!]*$/i.test(q)){ callar(); dormir(); return; }
 if(HCARDS.length&&/^(cierra|quita|cierre|quite|recoge)\s*(eso|esto|la tarjeta|las tarjetas|todo)?[\s.!]*$/i.test(q)){ holoCerrar(); hablar([alAzar(['Listo.','Recogido.','Hecho.'])]); return; }
