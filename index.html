@@ -1602,7 +1602,24 @@ var NOVAX_RE=/\b(novax|nova|novak|novac|nobax|n[oó]vax|profit|ventas?|vestas|fa
 // Ojo: sin \b al final, para que "muéstrame", "enséñame" o "gráfico" también cuenten.
 var VER_RE=/(^|[\s,¿¡])(mu[eé]str|ens[eé]ñ|ponme|pon |dame|ver |ver$|quiero ver|saca|abre|despliega|tarjeta|cuadro|tabla|gr[aá]fic|n[uú]meros|cifras|c[oó]mo va|cu[aá]nt)/i;
 var DIA_RE=/\b(hoy|ayer|anteayer|antier|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|semana|\d{1,2} de)/i;
+/* "¿Cuáles son mis deudas?": todo lo que debe Keyner en una sola tarjeta (Novax + sus deudas personales + lo de Diego). */
+var TODAS_DEUDAS_RE=/\b(mis deudas|deudas de keyner|todas (mis|las) deudas|cu[aá]les son mis deudas|cu[aá]nto debo en total|qu[eé] debo)\b/i;
+function tarjetaTodasDeudas(){
+google.script.run.withSuccessHandler(function(l){
+var pl=(PRO&&PRO.plan)||{}, d=pl.deudasIniciales||{Diego:100000,SrMolina:4500,Tata:6000}, f=pl.fechasSaldadas||{}, filas=[];
+var nx=(l&&l[0]&&l[0].items)||[];
+nx.forEach(function(x){ if(/accionista/i.test(x.k)) filas.push(['Novax · como accionista',x.v,'cuenta por cobrar a ti']); else if(/tr[aá]nsito/i.test(x.k)) filas.push(['Novax · tránsito',x.v,'cargado a tu nombre']); });
+if(!nx.length) filas.push(['Novax','—','no pude leer la cuenta']);
+filas.push(['Sr. Molina',usd(d.SrMolina),f.SrMolina?'se salda '+f.SrMolina:'']);
+filas.push(['Tata',usd(d.Tata),f.Tata?'se salda '+f.Tata:'']);
+filas.push(['Corolla',usd(pl.saldoCorolla),(pl.cuotasCorollaRestantes||0)+' cuotas']);
+filas.push(['Diego (asumida)',usd(d.Diego),'es de Novax; la pagas tú para cobrar los intereses']);
+holoTarjeta({tipo:'tabla',titulo:'Tus deudas hoy',sub:pl.libreDeDeudas?('Libre de deudas: '+pl.libreDeDeudas):'',cols:['A quién','Monto','Nota'],filas:filas},'Jarvis');
+}).tarjetasNovax('deuda novax');
+return true;
+}
 function tarjetaRapida(q){
+if(TODAS_DEUDAS_RE.test(q)) return tarjetaTodasDeudas();
 if(!VER_RE.test(q)) return false;
 if((/\b(deb[oe]|debe|deuda)\b/i.test(q) && /\bn[oó]va/i.test(q)) || !/\b(deb[oe]|debe|deuda|deudas|abon\w*|fondo|pr[eé]stamo|diego)\b/i.test(q) && (NOVAX_RE.test(q) || (DIA_RE.test(q) && /\b(vent|vest)|factur/i.test(q)))){   // Novax vive en el servidor: se pide sin pasar por la IA
 google.script.run.withSuccessHandler(function(l){ if(l&&l.length) holoMostrar(l,'Novax'); }).tarjetasNovax(q);
