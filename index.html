@@ -1604,7 +1604,7 @@ var VER_RE=/(^|[\s,¿¡])(mu[eé]str|ens[eé]ñ|ponme|pon |dame|ver |ver$|quiero
 var DIA_RE=/\b(hoy|ayer|anteayer|antier|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|semana|\d{1,2} de)/i;
 function tarjetaRapida(q){
 if(!VER_RE.test(q)) return false;
-if(NOVAX_RE.test(q) || (DIA_RE.test(q) && /\b(vent|vest)|factur/i.test(q))){   // Novax vive en el servidor: se pide sin pasar por la IA
+if(!/\b(deb[oe]|debe|deuda|deudas|abon\w*|fondo|pr[eé]stamo|diego)\b/i.test(q) && (NOVAX_RE.test(q) || (DIA_RE.test(q) && /\b(vent|vest)|factur/i.test(q)))){   // Novax vive en el servidor: se pide sin pasar por la IA
 google.script.run.withSuccessHandler(function(l){ if(l&&l.length) holoMostrar(l,'Novax'); }).tarjetasNovax(q);
 return true;
 }
@@ -1952,6 +1952,7 @@ esp.addEventListener('input',function(){ var v=parseFloat(esp.value); st.espera=
 var dsp=$('despierta'); dsp.checked=st.despierta!==false;
 dsp.addEventListener('change',function(){ st.despierta=dsp.checked; save(); if(dsp.checked) pideWake(); else soltarWake(); });
 var cl=$('clave'); cl.value=st.clave||''; cl.addEventListener('input',function(){ st.clave=cl.value.trim(); save(); micListo(); });
+if(!st.libreV2){ st.libre=false; st.libreV2=1; save(); }   /* por defecto responde solo si le dicen "Jarvis": así la TV y las conversaciones no se cuelan */
 var sc=$('sinclave'); sc.checked=st.libre!==false; sc.addEventListener('change',function(){ st.libre=sc.checked; save(); micListo(); });
 if(st.espera===2.2||st.espera==='2.2'){ st.espera=''; esp.value=''; }
 setTimeout(function(){ try{ google.script.run.calentar(); }catch(e){} },2500);   // deja listo Novax para la primera pregunta
