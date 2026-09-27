@@ -1615,14 +1615,14 @@ filas.push(['Tata',usd(d.Tata),f.Tata?'se salda '+f.Tata:'']);
 filas.push(['Corolla',usd(pl.saldoCorolla),(pl.cuotasCorollaRestantes||0)+' cuotas']);
 filas.push(['Diego (asumida)',usd(d.Diego),'es de Novax; la pagas tú para cobrar los intereses']);
 holoTarjeta({tipo:'tabla',titulo:'Tus deudas hoy',sub:pl.libreDeDeudas?('Libre de deudas: '+pl.libreDeDeudas):'',cols:['A quién','Monto','Nota'],filas:filas},'Jarvis');
-}).tarjetasNovax('deuda novax');
+}).withFailureHandler(function(e){ holoTarjeta({tipo:'texto',titulo:'Tus deudas',texto:'No pude leer Novax: '+(e&&e.message||e)},'Jarvis'); }).tarjetasNovax('deuda novax');
 return true;
 }
 function tarjetaRapida(q){
 if(TODAS_DEUDAS_RE.test(q)) return tarjetaTodasDeudas();
 if(!VER_RE.test(q)) return false;
 if((/\b(deb[oe]|debe|deuda)\b/i.test(q) && /\bn[oó]va/i.test(q)) || !/\b(deb[oe]|debe|deuda|deudas|abon\w*|fondo|pr[eé]stamo|diego)\b/i.test(q) && (NOVAX_RE.test(q) || (DIA_RE.test(q) && /\b(vent|vest)|factur/i.test(q)))){   // Novax vive en el servidor: se pide sin pasar por la IA
-google.script.run.withSuccessHandler(function(l){ if(l&&l.length) holoMostrar(l,'Novax'); }).tarjetasNovax(q);
+google.script.run.withSuccessHandler(function(l){ if(l&&l.length) holoMostrar(l,'Novax'); else holoTarjeta({tipo:'texto',titulo:'Novax',texto:'Novax no devolvió datos para esto.'},'Novax'); }).withFailureHandler(function(e){ holoTarjeta({tipo:'texto',titulo:'Novax',texto:'Error leyendo Novax: '+(e&&e.message||e)},'Novax'); }).tarjetasNovax(q);
 return true;
 }
 for(var i=0;i<TEMAS.length;i++){ if(TEMAS[i][0].test(q)){ var t=null; try{ t=TEMAS[i][1](); }catch(e){} if(t){ holoTarjeta(t,'Mis ingresos'); return true; } } }
