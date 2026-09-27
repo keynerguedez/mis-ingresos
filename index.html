@@ -1277,13 +1277,16 @@ function micEstado(t,cls){ mst.textContent=t; mst.className=cls||''; $('sv-asis'
 function claveRe(){ var c=(st.clave||'jarvis').toLowerCase().trim(); var alt=c==='jarvis'?'jarvis|járvis|yarvis|jarbis|yarbis|harvis|charvis|chárvis|jervis|yervis|jarvi|garvis':c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 return new RegExp('(^|[^a-záéíóúñü])('+alt+')(?=$|[^a-záéíóúñü])','i'); }
 var dicho='', pendiente=null, modoCodigo=false, intentos=0, interrumpido=false;
-var NUM={cero:'0',uno:'1',un:'1',una:'1',dos:'2',tres:'3',cuatro:'4',cinco:'5',seis:'6',siete:'7',ocho:'8',nueve:'9',diez:'10',once:'11',doce:'12',trece:'13',catorce:'14',quince:'15',dieciseis:'16',diecisiete:'17',dieciocho:'18',diecinueve:'19',veinte:'20',veintiuno:'21',veintidos:'22',veintitres:'23',veinticuatro:'24',veinticinco:'25',veintiseis:'26',veintisiete:'27',veintiocho:'28',veintinueve:'29',treinta:'30',cuarenta:'40',cincuenta:'50',sesenta:'60',setenta:'70',ochenta:'80',noventa:'90',cien:'100',ciento:'100'};
+var NUM={cero:'0',uno:'1',un:'1',una:'1',dos:'2',tres:'3',cuatro:'4',cinco:'5',seis:'6',siete:'7',ocho:'8',nueve:'9',diez:'10',once:'11',doce:'12',trece:'13',catorce:'14',quince:'15',dieciseis:'16',diecisiete:'17',dieciocho:'18',diecinueve:'19',veinte:'20',veintiuno:'21',veintidos:'22',veintitres:'23',veinticuatro:'24',veinticinco:'25',veintiseis:'26',veintisiete:'27',veintiocho:'28',veintinueve:'29',treinta:'30',cuarenta:'40',cincuenta:'50',sesenta:'60',setenta:'70',ochenta:'80',noventa:'90',cien:'100',ciento:'100',doscientos:'200',trescientos:'300',cuatrocientos:'400',quinientos:'500',seiscientos:'600',setecientos:'700',ochocientos:'800',novecientos:'900'};
 function soloDigitos(t){
 var w=String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,' ').split(/\s+/), out='';
 for(var i=0;i<w.length;i++){
 var x=w[i]; if(!x) continue;
 if(/^\d+$/.test(x)){ out+=x; continue; }
 if(NUM[x]!==undefined){
+// "doscientos veintiocho" = 228, "ciento cinco" = 105
+if(+NUM[x]>=100&&NUM[w[i+1]]!==undefined&&+NUM[w[i+1]]<100){ var c=+NUM[x]+ +NUM[w[i+1]]; i++;
+if(w[i+1]==='y'&&NUM[w[i+2]]!==undefined&&+NUM[w[i+2]]<10){ c+= +NUM[w[i+2]]; i+=2; } out+=String(c); continue; }
 if(w[i+1]==='y'&&NUM[w[i+2]]!==undefined&&+NUM[x]>=30&&+NUM[x]<=90){ out+=String(+NUM[x]+ +NUM[w[i+2]]); i+=2; continue; }
 out+=NUM[x];
 }
@@ -1469,7 +1472,7 @@ var sep=separaAcciones(String(obj.texto||'No tengo respuesta.'));
 sep.acciones.forEach(function(c){ try{ ejecutar(c); }catch(e){} });
 var txt=sep.texto||'Listo.';
 var conTarjeta=yaMostro;
-if(obj.tarjetas&&obj.tarjetas.length){ holoMostrar(obj.tarjetas,'Jarvis'); conTarjeta=true; }
+if(obj.tarjetas&&obj.tarjetas.length&&!yaMostro){ holoMostrar(obj.tarjetas,'Jarvis'); conTarjeta=true; }   // si ya salió la tarjeta exacta del servidor, no se le encima otra armada por la IA
 else if(pideVer&&!yaMostro){ holoTarjeta({tipo:'texto',titulo:'Jarvis',texto:txt},'Jarvis'); conTarjeta=true; }   // pidió verlo: siempre aparece algo
 if((obj.mostrar&&obj.mostrar.length)||(obj.fuentes&&obj.fuentes.length)){ pantalla(obj.mostrar,obj.fuentes,q); conTarjeta=true; }
 chatAdd('assistant',txt); CHAT.push({r:'assistant',t:txt,ts:Date.now()}); if(CHAT.length>40) CHAT=CHAT.slice(-40); guardaChat();
@@ -1588,7 +1591,7 @@ var TEMAS=[
 [/\b(cuerpo|salud|peso|grasa|pulso|sue[ñn]o)\b/i,tarjetaSalud],
 [/\b(mes|ingresos|n[uú]meros|cifras|cauchos|servicio|casanova|disponible|llevo|gan[oé]|ganancia)\b/i,tarjetaMes]
 ];
-var NOVAX_RE=/\b(novax|nova|profit|preventa|inventario|saldos?|bancos?|cobrar|cxc|vendedor(es)?|clientes?|l[ií]neas?|tr[aá]nsito)\b/i;
+var NOVAX_RE=/\b(novax|nova|novak|novac|nobax|n[oó]vax|profit|ventas?|vestas|factur\w*|preventa|inventario|saldos?|bancos?|cobrar|cxc|vendedor(es)?|clientes?|l[ií]neas?|tr[aá]nsito)\b/i;
 /* Devuelve true si mostró algo al instante */
 // Ojo: sin \b al final, para que "muéstrame", "enséñame" o "gráfico" también cuenten.
 var VER_RE=/(^|[\s,¿¡])(mu[eé]str|ens[eé]ñ|ponme|pon |dame|ver |ver$|quiero ver|saca|abre|despliega|tarjeta|cuadro|tabla|gr[aá]fic|n[uú]meros|cifras|c[oó]mo va|cu[aá]nt)/i;
@@ -1799,7 +1802,8 @@ if(modoCodigo){
 $('sv-asis').textContent='Esperando el código';
 var dg=soloDigitos(txt), n=+st.codigoLen||0, cands=[txt];
 if(dg){ cands.push(dg);
-if(n&&dg.length>n){ for(var i=0;i+n<=dg.length&&cands.length<14;i++) cands.push(dg.substr(i,n)); } }
+if(n&&dg.length>n){ for(var i=0;i+n<=dg.length&&cands.length<14;i++) cands.push(dg.substr(i,n)); }
+if(n&&dg.length<n) cands.push(('0000000000'+dg).slice(-n)); }   // el dictado a veces se come el cero inicial: "0228" llega como "228" o "2:28" 
 Promise.all(cands.map(hashCodigo)).then(function(hs){
 if(hs.indexOf(st.codigoHash)>=0){
 modoCodigo=false; intentos=0; $('boot').classList.add('off'); document.body.classList.remove('velado');
@@ -1880,7 +1884,7 @@ silT=setTimeout(function(){ consumido=full.length; procesar(nuevo); },ms);
 };
 rec.onend=function(){ consumido=0; if(micOn) setTimeout(function(){ try{ rec.start(); }catch(_){} },250); };
 rec.onerror=function(e){ if(/not-allowed|service-not-allowed|audio-capture/.test(e.error)){ micOn=false; rec=null; micEstado('Micrófono bloqueado · toca la pantalla o escribe en Asistente','off'); } };
-rec.onstart=function(){ micVivo=true; };
+rec.onstart=rec.onaudiostart=function(){ micVivo=true; };
 micOn=true; micVivo=false;
 try{ rec.start(); micListo(); }catch(err){ micOn=false; rec=null; micEstado('No pude abrir el micrófono','off'); }
 // Al volver de otra app, iOS a veces "arranca" el micrófono sin que escuche de verdad: si no confirma, se avisa en vez de quedar colgado.
