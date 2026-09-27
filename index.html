@@ -1449,7 +1449,13 @@ var pideVer=VER_RE.test(q);
 var yaMostro=false; try{ yaMostro=tarjetaRapida(q); }catch(e){}
 document.body.classList.add('pensando'); micEstado('Analizando…','escucha');
 var paraMul=muletillaSiTarda(MULETILLAS,1800);
+// Si la respuesta se pierde (salió de la app, se cayó la señal), Jarvis no se queda trabado esperando para siempre.
+var miPeticion=++PETICION;
+var vigia=setTimeout(function(){ if(miPeticion!==PETICION||!ocupado) return; PETICION++; ocupado=false; pendiente=null; document.body.classList.remove('pensando'); paraMul();
+var m='Se me cayó la conexión. ¿Me lo repite?'; chatAdd('assistant',m); hablar([m]); micListo(); },45000);
 google.script.run.withSuccessHandler(function(r){
+if(miPeticion!==PETICION) return;               // llegó tarde: ya se descartó
+clearTimeout(vigia);
 ocupado=false; document.body.classList.remove('pensando'); paraMul();
 if(r&&r.ignorar){   // era ruido u otra persona: lo quita sin decir nada
 CHAT=CHAT.filter(function(m){ return m.ts!==tq; }); guardaChat(); if(nodoQ&&nodoQ.parentNode) nodoQ.parentNode.removeChild(nodoQ);
@@ -1472,12 +1478,13 @@ if(conTarjeta&&deVoz&&!/\?\s*$/.test(txt)){ dichos.push(alAzar(['¿Desea algo m�
 hablar(dichos); micListo();
 if(pendiente){ var sig=pendiente; pendiente=null; setTimeout(function(){ preguntarIA(sig,true); },400); }
 }).withFailureHandler(function(e){
+if(miPeticion!==PETICION) return; clearTimeout(vigia);
 ocupado=false; document.body.classList.remove('pensando'); paraMul(); var m='No pude conectarme con el servidor.'; chatAdd('assistant',m+' ('+(e&&e.message||e)+')'); hablar([m]); micListo();
 }).preguntar((yaMostro?'[ya hay una tarjeta en pantalla con esos datos: coméntalos en dos frases, sin repetir todos los números y sin TARJETA] ':'')+q,contexto(),CHAT.slice(-11,-1).map(function(m){ return {r:m.r,t:m.t}; }),!!deVoz);
 }
 
 /* ===== TARJETAS HOLOGRÁFICAS ===== */
-var HOLO_L=$('tarjetas'), HCARDS=[], esperaMas=0;
+var HOLO_L=$('tarjetas'), HCARDS=[], esperaMas=0, PETICION=0, micVivo=false;
 function hnum(v){ if(typeof v==='number') return (Math.round(v*100)/100).toLocaleString('es-VE'); return esc(v); }
 function hcuerpo(t){
 var tipo=String(t.tipo||'texto').toLowerCase(), i=0, h='';
@@ -1588,7 +1595,7 @@ var VER_RE=/(^|[\s,¿¡])(mu[eé]str|ens[eé]ñ|ponme|pon |dame|ver |ver$|quiero
 var DIA_RE=/\b(hoy|ayer|anteayer|antier|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|semana|\d{1,2} de)/i;
 function tarjetaRapida(q){
 if(!VER_RE.test(q)) return false;
-if(NOVAX_RE.test(q) || (DIA_RE.test(q) && /\bvent|factur/i.test(q))){   // Novax vive en el servidor: se pide sin pasar por la IA
+if(NOVAX_RE.test(q) || (DIA_RE.test(q) && /\b(vent|vest)|factur/i.test(q))){   // Novax vive en el servidor: se pide sin pasar por la IA
 google.script.run.withSuccessHandler(function(l){ if(l&&l.length) holoMostrar(l,'Novax'); }).tarjetasNovax(q);
 return true;
 }
@@ -1846,11 +1853,6 @@ function micListo(){ if(micOn && !ocupado) micEstado(despierto?'Lo escucho…':(
 function micIniciar(){
 if(!SR){ micEstado('Este navegador no reconoce voz · escribe en Asistente','off'); return; }
 if(micOn && rec) return;
-// Deja el micrófono abierto toda la sesión: así el iPhone no vuelve a pedir permiso cada vez que el reconocimiento se reinicia,
-// y de paso activa la cancelación de eco y de ruido del sistema.
-if(!window.__micStream && navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
-navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}).then(function(s){ window.__micStream=s; }).catch(function(){});
-}
 rec=new SR(); rec.lang='es-MX'; rec.continuous=true; rec.interimResults=true;
 rec.onresult=function(e){
 var full='', ult=e.results[e.results.length-1], fin=!!(ult&&ult.isFinal), conf=ult&&ult[0]?ult[0].confidence:0;
@@ -1878,8 +1880,11 @@ silT=setTimeout(function(){ consumido=full.length; procesar(nuevo); },ms);
 };
 rec.onend=function(){ consumido=0; if(micOn) setTimeout(function(){ try{ rec.start(); }catch(_){} },250); };
 rec.onerror=function(e){ if(/not-allowed|service-not-allowed|audio-capture/.test(e.error)){ micOn=false; rec=null; micEstado('Micrófono bloqueado · toca la pantalla o escribe en Asistente','off'); } };
-micOn=true;
+rec.onstart=function(){ micVivo=true; };
+micOn=true; micVivo=false;
 try{ rec.start(); micListo(); }catch(err){ micOn=false; rec=null; micEstado('No pude abrir el micrófono','off'); }
+// Al volver de otra app, iOS a veces "arranca" el micrófono sin que escuche de verdad: si no confirma, se avisa en vez de quedar colgado.
+setTimeout(function(){ if(micOn && !micVivo){ try{ rec&&rec.abort(); }catch(_){} rec=null; micOn=false; micEstado('Toca la pantalla para volver a escuchar','off'); } },3000);
 }
 var wl=null, ocultoEn=0;
 window.__auth=false;
@@ -1897,6 +1902,9 @@ if(window.__HOSTED && LOCK) document.body.classList.add('cerrado');
 }
 else {
 pideWake();
+// Lo que quedó a medias mientras estaba fuera ya no va a llegar: se suelta para que Jarvis vuelva a escuchar.
+if(ocupado||creOcupado){ PETICION++; ocupado=false; creOcupado=false; pendiente=null; document.body.classList.remove('pensando'); }
+if(rec){ try{ rec.abort(); }catch(_){} rec=null; } micOn=false;
 if($('c-salud') && $('c-salud').open) HOLO.abrir();
 if(Date.now()-ultTasas>30*60000){ ultTasas=Date.now(); google.script.run.withSuccessHandler(function(t){ aplicaTasas(t); }).tasas(); }
 if(Date.now()-ocultoEn<2500){ document.body.classList.remove('cerrado'); if(!micOn) micIniciar(); return; }
