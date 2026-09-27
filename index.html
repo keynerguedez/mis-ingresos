@@ -1299,6 +1299,10 @@ return crypto.subtle.digest('SHA-256',new TextEncoder().encode('mi-'+d)).then(fu
 return Array.prototype.map.call(new Uint8Array(b),function(x){ return ('0'+x.toString(16)).slice(-2); }).join('');
 });
 }
+/* Saludo corto al entrar, máximo una vez por hora; el reporte completo solo cuando lo pide. */
+function toca_saludar(){ var u=0; try{ u=+localStorage.getItem('ult_saludo')||0; }catch(e){} return Date.now()-u>3600000; }
+function marca_saludo(){ try{ localStorage.setItem('ult_saludo',String(Date.now())); }catch(e){} }
+function saludoCorto(){ return [saludoHora()+'.','¿En qué puedo ayudarle hoy, señor?']; }
 function saludoHora(){ var h=new Date().getHours(); return h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches'; }
 function hablandoAhora(){ return (window.speechSynthesis&&speechSynthesis.speaking)||Date.now()-finVoz<700; }
 function norm(t){ return String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
@@ -1409,7 +1413,7 @@ function seguir(){ var s=parseFloat(st.seguir); return Math.max(4000,Math.min(12
 function ventana(){ return seguir(); }
 /* ¿Suena a algo dicho a Jarvis, o es la TV / gente hablando? Se decide aquí, sin gastar IA. */
 var INTENCION=/(\?|^(qu[eé]|cu[aá]nt[oa]s?|cu[aá]l(es)?|c[oó]mo|d[oó]nde|cu[aá]ndo|qui[eé]n|por qu[eé])(?=\s|$)|\b(dime|dame|mu[eé]str|ens[eé]ñ|ponme|pon en|abre|abr[ií]|cierra|cierre|quita|busca|b[uú]scame|revisa|hazme|arma|calcula|actualiza|escanea|bloquea|recoge|lee|l[eé]eme|resumen|resume|compara|comp[aá]rame|ll[eé]vame|ve a|vete a|vamos a|necesito|quiero|puedes|podr[ií]as|ay[uú]dame|expl[ií]came|rec[uué]rdame|anota))/i;
-var TEMA=/\b(novax|nova|robust|caucho|cauchos|casanova|servicio|ventas?|venta|vendedor|cliente|inventario|preventa|profit|mes|meta|deuda|diego|molina|tata|corolla|abono|disponible|tasa|d[oó]lar|euro|binance|usdt|bcv|bol[ií]var|peso|grasa|pulso|sue[ñn]o|cuerpo|salud|tarjeta|pantalla|creaci[oó]n|creaciones|idea|plan|gasto|gastos|ingreso|ingresos|utilidad|margen|saldo|banco|cobrar|pagar|n[uú]mero|cifra|internet|instagram|clima|noticia|precio)\b/i;
+var TEMA=/\b(caja|cobr\w*|entr[oó]|entraron|semana|ayer|hoy|factur\w*|profit|clientes?|novax|nova|robust|caucho|cauchos|casanova|servicio|ventas?|venta|vendedor|cliente|inventario|preventa|profit|mes|meta|deuda|diego|molina|tata|corolla|abono|disponible|tasa|d[oó]lar|euro|binance|usdt|bcv|bol[ií]var|peso|grasa|pulso|sue[ñn]o|cuerpo|salud|tarjeta|pantalla|creaci[oó]n|creaciones|idea|plan|gasto|gastos|ingreso|ingresos|utilidad|margen|saldo|banco|cobrar|pagar|n[uú]mero|cifra|internet|instagram|clima|noticia|precio)\b/i;
 var CORTA=/^(s[ií]|no|dale|ok|okey|listo|ya|claro|eso|exacto|correcto|perfecto|bueno|vale|gracias|cierra|ci[eé]rrala|qu[ií]tala|quita eso|recoge|sigue|contin[uú]a|otra vez|repite|m[aá]s|menos|el primero|el segundo|la otra|esa|ese)[\s.!,]*$/i;
 function esParaJarvis(t,enConversacion){
 t=t.trim(); var n=t.split(/\s+/).length;
@@ -1417,6 +1421,7 @@ if(n>28) return false;                                     // parrafadas largas 
 if(enConversacion){ if(CORTA.test(t)&&n<=4) return true;
 /* respuesta al "¿desea algo más?" */ if(esperaMas&&n<=5&&/^(no|nada|listo|ya|gracias|as[ií] est[aá]|estoy bien|todo bien|eso es todo)\b/i.test(t)) return true;
  if(n<=6&&/^(y |pero |entonces |ahora )?(el|la|los|las|de|del|con|para|en)\b/i.test(t)&&!TEMA.test(t)) return false; return INTENCION.test(t)||TEMA.test(t); }
+if(Date.now()-ultRespuesta<120000 && n<=20 && (INTENCION.test(t)||TEMA.test(t))) return true;   /* repregunta poco después de una respuesta: sigue el hilo */
 return n>=2 && INTENCION.test(t) && TEMA.test(t) || (INTENCION.test(t) && n<=8);
 }
 
@@ -1476,6 +1481,7 @@ if(obj.tarjetas&&obj.tarjetas.length&&!yaMostro){ holoMostrar(obj.tarjetas,'Jarv
 else if(pideVer&&!yaMostro){ holoTarjeta({tipo:'texto',titulo:'Jarvis',texto:txt},'Jarvis'); conTarjeta=true; }   // pidió verlo: siempre aparece algo
 if((obj.mostrar&&obj.mostrar.length)||(obj.fuentes&&obj.fuentes.length)){ pantalla(obj.mostrar,obj.fuentes,q); conTarjeta=true; }
 chatAdd('assistant',txt); CHAT.push({r:'assistant',t:txt,ts:Date.now()}); if(CHAT.length>40) CHAT=CHAT.slice(-40); guardaChat();
+ultRespuesta=Date.now();
 var dichos=frases(txt);
 if(conTarjeta&&deVoz&&!/\?\s*$/.test(txt)){ dichos.push(alAzar(['¿Desea algo más?','¿Algo más, señor?','¿Necesita algo más?'])); esperaMas=Date.now(); }
 hablar(dichos); micListo();
@@ -1487,7 +1493,7 @@ ocupado=false; document.body.classList.remove('pensando'); paraMul(); var m='No 
 }
 
 /* ===== TARJETAS HOLOGRÁFICAS ===== */
-var HOLO_L=$('tarjetas'), HCARDS=[], esperaMas=0, PETICION=0, micVivo=false;
+var HOLO_L=$('tarjetas'), HCARDS=[], esperaMas=0, PETICION=0, micVivo=false, ultRespuesta=0;
 function hnum(v){ if(typeof v==='number') return (Math.round(v*100)/100).toLocaleString('es-VE'); return esc(v); }
 function hcuerpo(t){
 var tipo=String(t.tipo||'texto').toLowerCase(), i=0, h='';
@@ -1807,7 +1813,7 @@ if(n&&dg.length<n) cands.push(('0000000000'+dg).slice(-n)); }   // el dictado a 
 Promise.all(cands.map(hashCodigo)).then(function(hs){
 if(hs.indexOf(st.codigoHash)>=0){
 modoCodigo=false; intentos=0; $('boot').classList.add('off'); document.body.classList.remove('velado');
-hablar([alAzar(['Acceso concedido.','Confirmado, señor.','Adelante, señor.'])].concat(SAL.slice(1)));
+if(toca_saludar()){ marca_saludo(); hablar(['Acceso concedido.'].concat(saludoCorto())); } else hablar([alAzar(['Adelante, señor.','Listo, señor.','Aquí estoy.'])]);
 micListo();
 } else {
 intentos++;
@@ -1818,7 +1824,7 @@ hablar([intentos>=3?'Ese código no es, señor. Sin él no puedo mostrarle nada.
 });
 return;
 }
-if(/^(c[aá]llate|silencio|basta|detente|para ya)\b/i.test(txt) && window.speechSynthesis && speechSynthesis.speaking){ callar(); return; }
+if(/^(c[aá]llate|silencio|basta|detente|para ya|p[aá]rale)\b/i.test(txt) && txt.split(/\s+/).length<=3){ callar(); $('sv-asis').textContent='En silencio · lo sigo escuchando'; return; }
 if(/\b(bloquea|bloquear|bloqueate|cierra)\b.*\b(pantalla|informaci[oó]n|todo|datos|n[uú]meros)\b/i.test(txt) || /^modo privado/i.test(txt)){ bloquear(); return; }
 var m=txt.match(claveRe()), q=null;
 if(m){
@@ -1844,7 +1850,7 @@ if(dijoNo || (/^(gracias|muchas gracias|eso es todo|nada m[aá]s|es todo|listo g
 esperaMas=0; holoCerrar(); ejecutar('cerrar todo'); if(VISTA!=='ing') irVista('ing'); window.scrollTo({top:0,behavior:'smooth'});
 hablar([alAzar(['A la orden.','Con gusto.','Cuando me necesite.','Aquí estoy.'])]); atento=0; setTimeout(function(){ dormir(); },1500); return;
 }
-if(/^(dame el |el )?resumen\b/i.test(q)){ hablar(SAL); return; }
+if(/\b(reporte|resumen|informe)\b/i.test(q) && /\b(hoy|d[ií]a|dame|cu[aá]l|dime|el reporte|el resumen|el informe)\b/i.test(q) && q.split(/\s+/).length<=10){ hablar(SAL.slice(1).length?SAL.slice(1):SAL); return; }   /* SAL se arma al abrir, comparando con la visita anterior */
 preguntarIA(q,true);
 }
 function bloquear(hablando){
@@ -1863,7 +1869,7 @@ var full='', ult=e.results[e.results.length-1], fin=!!(ult&&ult.isFinal), conf=u
 for(var i=0;i<e.results.length;i++) full+=e.results[i][0].transcript+' ';
 if(full.length<consumido) consumido=0;
 var nuevo=full.slice(consumido).trim(); if(!nuevo) return;
-if(!modoCodigo && fin && conf>0 && conf<0.25 && !claveRe().test(nuevo)){ consumido=full.length; $('sv-asis').textContent='No le entendí bien'; return; }   // voz lejana o ruido
+if(!modoCodigo && fin && conf>0 && conf<0.25 && !claveRe().test(nuevo) && !/\b(cierr|quit|recog|p[aá]ra|silencio|c[aá]llate|basta|regres|vuelve|no|gracias)/i.test(nuevo) && !esParaJarvis(nuevo,true)){ /* baja confianza: solo se descarta si además no suena a orden */ consumido=full.length; $('sv-asis').textContent='No le entendí bien'; return; }   // voz lejana o ruido
 if(hablandoAhora()){
 // Mientras habla, lo interrumpe su nombre, "para/cállate" o cualquier orden clara para él (la TV, la gente y su eco no lo cortan)
 if(esEco(nuevo)){ consumido=full.length; return; }
@@ -2001,8 +2007,8 @@ if(pideCod){
 modoCodigo=true; document.body.classList.add('velado');
 micEstado('Esperando el código','escucha');
 var SIN_SALUDO=false; try{ SIN_SALUDO=sessionStorage.getItem('reinicio')==='1'; sessionStorage.removeItem('reinicio'); }catch(e){}
-if(st.voz!==false && !saludado){ saludado=true; hablar(SIN_SALUDO?['Sistema reiniciado. Dígame su código.']:[saludoHora()+', señor Keyner.','Dígame su código de acceso para mostrarle los números.']); }
-} else if(st.voz!==false && !saludado){ saludado=true; hablar(SIN_SALUDO?['Sistema reiniciado.']:SAL); }
+if(st.voz!==false && !saludado){ saludado=true; hablar(SIN_SALUDO?['Sistema reiniciado. Dígame su código.']:(toca_saludar()?[saludoHora()+', señor. Dígame su código.']:['Su código, señor.'])); }
+} else if(st.voz!==false && !saludado){ saludado=true; if(SIN_SALUDO) hablar(['Sistema reiniciado.']); else if(toca_saludar()){ marca_saludo(); hablar(saludoCorto()); } }
 }
 function pedirToque(){ var av=$('toque'); if(av) av.hidden=true; }
 window.__hablo=false;
