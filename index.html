@@ -1604,7 +1604,7 @@ var VER_RE=/(^|[\s,¿¡])(mu[eé]str|ens[eé]ñ|ponme|pon |dame|ver |ver$|quiero
 var DIA_RE=/\b(hoy|ayer|anteayer|antier|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|semana|\d{1,2} de)/i;
 function tarjetaRapida(q){
 if(!VER_RE.test(q)) return false;
-if(!/\b(deb[oe]|debe|deuda|deudas|abon\w*|fondo|pr[eé]stamo|diego)\b/i.test(q) && (NOVAX_RE.test(q) || (DIA_RE.test(q) && /\b(vent|vest)|factur/i.test(q)))){   // Novax vive en el servidor: se pide sin pasar por la IA
+if((/\b(deb[oe]|debe|deuda)\b/i.test(q) && /\bn[oó]va/i.test(q)) || !/\b(deb[oe]|debe|deuda|deudas|abon\w*|fondo|pr[eé]stamo|diego)\b/i.test(q) && (NOVAX_RE.test(q) || (DIA_RE.test(q) && /\b(vent|vest)|factur/i.test(q)))){   // Novax vive en el servidor: se pide sin pasar por la IA
 google.script.run.withSuccessHandler(function(l){ if(l&&l.length) holoMostrar(l,'Novax'); }).tarjetasNovax(q);
 return true;
 }
