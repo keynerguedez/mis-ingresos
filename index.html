@@ -1276,7 +1276,7 @@ var mst=$('mic-st');
 function micEstado(t,cls){ mst.textContent=t; mst.className=cls||''; $('sv-asis').textContent=t; }
 function claveRe(){ var c=(st.clave||'jarvis').toLowerCase().trim(); var alt=c==='jarvis'?'jarvis|járvis|yarvis|jarbis|yarbis|harvis|charvis|chárvis|jervis|yervis|jarvi|garvis':c.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
 return new RegExp('(^|[^a-záéíóúñü])('+alt+')(?=$|[^a-záéíóúñü])','i'); }
-var dicho='', pendiente=null, modoCodigo=false, intentos=0;
+var dicho='', pendiente=null, modoCodigo=false, intentos=0, interrumpido=false;
 var NUM={cero:'0',uno:'1',un:'1',una:'1',dos:'2',tres:'3',cuatro:'4',cinco:'5',seis:'6',siete:'7',ocho:'8',nueve:'9',diez:'10',once:'11',doce:'12',trece:'13',catorce:'14',quince:'15',dieciseis:'16',diecisiete:'17',dieciocho:'18',diecinueve:'19',veinte:'20',veintiuno:'21',veintidos:'22',veintitres:'23',veinticuatro:'24',veinticinco:'25',veintiseis:'26',veintisiete:'27',veintiocho:'28',veintinueve:'29',treinta:'30',cuarenta:'40',cincuenta:'50',sesenta:'60',setenta:'70',ochenta:'80',noventa:'90',cien:'100',ciento:'100'};
 function soloDigitos(t){
 var w=String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[^a-z0-9\s]/g,' ').split(/\s+/), out='';
@@ -1502,7 +1502,6 @@ el.querySelector('.hx').addEventListener('click',function(ev){ ev.stopPropagatio
 return c;
 }
 function hfrente(c){
-if(HCARDS[HCARDS.length-1]===c) return;
 HCARDS=HCARDS.filter(function(x){ return x!==c; }); HCARDS.push(c);
 HCARDS.forEach(function(x,k){ var ult=k===HCARDS.length-1; x.el.classList.toggle('atras',!ult); x.el.style.zIndex=k+10; if(!ult){ x.x=-18*(HCARDS.length-1-k); x.y=x.x; } else { x.x=0; x.y=0; } x.el.style.setProperty('--x',x.x+'px'); x.el.style.setProperty('--y',x.y+'px'); });
 }
@@ -1809,7 +1808,13 @@ else if(estaDespierto()){ if(esParaJarvis(txt,true)) q=txt; else { $('sv-asis').
 else if(st.libre!==false){ if(esParaJarvis(txt,false)) q=txt; else { $('sv-asis').textContent='Ignoré: '+txt.slice(0,40); return; } }
 if(!q){ $('sv-asis').textContent='Dígame "'+(st.clave||'jarvis')+'" para hablarme'; return; }
 if(/^(para|p[aá]rale|detente|c[aá]llate|silencio|basta|stop|espera)\b[\s.!]*$/i.test(q)){ callar(); dormir(); return; }
-if(HCARDS.length&&/^(cierra|quita|cierre|quite|recoge)\s*(eso|esto|la tarjeta|las tarjetas|todo)?[\s.!]*$/i.test(q)){ holoCerrar(); hablar([alAzar(['Listo.','Recogido.','Hecho.'])]); return; }
+if(/^(cierra|quita|cierre|quite|recoge|cerrar|quitar)\s*(eso|esto|la tarjeta|las tarjetas|todo|todas|las pantallas?)?[\s.!]*$/i.test(q) || /\b(cierra|cerrar|quita|recoge)\b.*\b(tarjetas?|todo|pantalla|hologramas?)\b/i.test(q)){
+holoCerrar(); if(/todo|pantalla/i.test(q)) ejecutar('cerrar todo'); hablar([alAzar(['Listo.','Recogido.','Hecho.'])]); return; }
+if(/\b(reinicia|reiniciar|rein[ií]ciate|reinicio|reset|resetea|empieza de nuevo|empecemos de nuevo)\b/i.test(q) && q.split(/\s+/).length<=8){
+callar(); holoCerrar(); ejecutar('cerrar todo'); CHAT=[]; guardaChat(); try{ sessionStorage.setItem('reinicio','1'); }catch(e){}
+hablar(['Reiniciando.']); setTimeout(function(){ location.reload(); },1400); return; }
+if(/\b(pantalla de inicio|al inicio|a la principal|regresa|regr[eé]same|vuelve|volver|ll[eé]vame al inicio|arriba)\b/i.test(q) && q.split(/\s+/).length<=8){
+holoCerrar(); ejecutar('cerrar todo'); if(VISTA!=='ing') irVista('ing'); window.scrollTo({top:0,behavior:'smooth'}); hablar([alAzar(['Listo.','De vuelta al inicio.'])]); return; }
 if(/^(gracias|muchas gracias|eso es todo|nada m[aá]s|es todo|listo gracias|chao|hasta luego|ya est[aá])\b/i.test(q) && q.split(/\s+/).length<=5){
 hablar([alAzar(['A la orden.','Con gusto.','Cuando me necesite.','Aquí estoy.'])]); ejecutar('cerrar todo'); atento=0; setTimeout(function(){ dormir(); },1500); return;
 }
@@ -1826,6 +1831,11 @@ function micListo(){ if(micOn && !ocupado) micEstado(despierto?'Lo escucho…':(
 function micIniciar(){
 if(!SR){ micEstado('Este navegador no reconoce voz · escribe en Asistente','off'); return; }
 if(micOn && rec) return;
+// Deja el micrófono abierto toda la sesión: así el iPhone no vuelve a pedir permiso cada vez que el reconocimiento se reinicia,
+// y de paso activa la cancelación de eco y de ruido del sistema.
+if(!window.__micStream && navigator.mediaDevices && navigator.mediaDevices.getUserMedia){
+navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}).then(function(s){ window.__micStream=s; }).catch(function(){});
+}
 rec=new SR(); rec.lang='es-MX'; rec.continuous=true; rec.interimResults=true;
 rec.onresult=function(e){
 var full='', ult=e.results[e.results.length-1], fin=!!(ult&&ult.isFinal), conf=ult&&ult[0]?ult[0].confidence:0;
@@ -1834,9 +1844,12 @@ if(full.length<consumido) consumido=0;
 var nuevo=full.slice(consumido).trim(); if(!nuevo) return;
 if(!modoCodigo && fin && conf>0 && conf<0.25 && !claveRe().test(nuevo)){ consumido=full.length; $('sv-asis').textContent='No le entendí bien'; return; }   // voz lejana o ruido
 if(hablandoAhora()){
-// Mientras habla solo lo interrumpe su nombre o "para/cállate" (la TV, la gente y su propio eco no lo cortan)
-if(esEco(nuevo) || !(claveRe().test(nuevo) || /^(para|p[aá]rale|c[aá]llate|basta|detente|silencio|stop)\b/i.test(nuevo))){ consumido=full.length; return; }
+// Mientras habla, lo interrumpe su nombre, "para/cállate" o cualquier orden clara para él (la TV, la gente y su eco no lo cortan)
+if(esEco(nuevo)){ consumido=full.length; return; }
+var corta=/^(para|p[aá]rale|c[aá]llate|basta|detente|silencio|stop|espera|ya)\b/i.test(nuevo);
+if(!(claveRe().test(nuevo) || corta || esParaJarvis(nuevo,true))){ consumido=full.length; return; }
 callar(); finVoz=0;
+if(!corta){ interrumpido=true; hablar([alAzar(['Disculpe, lo escucho.','Dígame.','Perdón, lo escucho.'])]); }
 }
 $('sv-asis').textContent='Oí: '+nuevo;
 clearTimeout(silT);
@@ -1960,8 +1973,9 @@ pideWake(); micIniciar();
 if(pideCod){
 modoCodigo=true; document.body.classList.add('velado');
 micEstado('Esperando el código','escucha');
-if(st.voz!==false && !saludado){ saludado=true; hablar([saludoHora()+', señor Keyner.','Dígame su código de acceso para mostrarle los números.']); }
-} else if(st.voz!==false && !saludado){ saludado=true; hablar(SAL); }
+var SIN_SALUDO=false; try{ SIN_SALUDO=sessionStorage.getItem('reinicio')==='1'; sessionStorage.removeItem('reinicio'); }catch(e){}
+if(st.voz!==false && !saludado){ saludado=true; hablar(SIN_SALUDO?['Sistema reiniciado. Dígame su código.']:[saludoHora()+', señor Keyner.','Dígame su código de acceso para mostrarle los números.']); }
+} else if(st.voz!==false && !saludado){ saludado=true; hablar(SIN_SALUDO?['Sistema reiniciado.']:SAL); }
 }
 function pedirToque(){ var av=$('toque'); if(av) av.hidden=true; }
 window.__hablo=false;
