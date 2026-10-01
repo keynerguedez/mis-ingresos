@@ -1621,7 +1621,7 @@ return true;
 function tarjetaRapida(q){
 if(TODAS_DEUDAS_RE.test(q)) return tarjetaTodasDeudas();
 if(!VER_RE.test(q)) return false;
-if((/\b(deb[oe]|debe|deuda)\b/i.test(q) && /\bn[oó]va/i.test(q)) || !/\b(deb[oe]|debe|deuda|deudas|abon\w*|fondo|pr[eé]stamo|diego)\b/i.test(q) && (NOVAX_RE.test(q) || (DIA_RE.test(q) && /\b(vent|vest)|factur/i.test(q)))){   // Novax vive en el servidor: se pide sin pasar por la IA
+if((/\b(deb[oe]|debe|deuda)\b/i.test(q) && /\b(n[oó]va\w*|n[oó]ba\w*|novak|novac|no va[xks])\b/i.test(q)) || !/\b(deb[oe]|debe|deuda|deudas|abon\w*|fondo|pr[eé]stamo|diego)\b/i.test(q) && (NOVAX_RE.test(q) || (DIA_RE.test(q) && /\b(vent|vest)|factur/i.test(q)))){   // Novax vive en el servidor: se pide sin pasar por la IA
 google.script.run.withSuccessHandler(function(l){ if(l&&l.length) holoMostrar(l,'Novax'); else holoTarjeta({tipo:'texto',titulo:'Novax',texto:'Novax no devolvió datos para esto.'},'Novax'); }).withFailureHandler(function(e){ holoTarjeta({tipo:'texto',titulo:'Novax',texto:'Error leyendo Novax: '+(e&&e.message||e)},'Novax'); }).tarjetasNovax(q);
 return true;
 }
