@@ -475,8 +475,16 @@ body.velado .cand{display:block;position:fixed;left:0;right:0;top:0;z-index:55;p
 <label for="clave">Palabra para llamarlo<input id="clave" type="text" autocomplete="off" placeholder="jarvis"></label>
 <label class="opt"><input id="sinclave" type="checkbox" checked> Siempre activo: responde sin decir la palabra (el ruido y las voces ajenas se descartan solos)</label>
 <label for="espera">Segundos de silencio antes de responder<input id="espera" type="number" inputmode="decimal" step="0.2" min="1" max="6" placeholder="1.5"></label>
-<label for="minutos">Segundos que sigue escuchando después de responder (sin repetir "Jarvis")<input id="minutos" type="number" inputmode="decimal" step="1" min="4" max="120" placeholder="10"></label>
+<label for="minutos">Segundos que sigue escuchando después de responder (sin repetir "Jarvis")<input id="minutos" type="number" inputmode="decimal" step="1" min="4" max="120" placeholder="45"></label>
 <label class="opt"><input id="despierta" type="checkbox" checked> Mantener la pantalla encendida mientras escucha</label>
+</div>
+<div class="fields" id="pv-box">
+<label for="pvkey">Clave de Picovoice (opcional: si está vacía usa el motor propio del teléfono)<input id="pvkey" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="déjalo vacío o pega el AccessKey"></label>
+<label class="opt"><input id="pvsolo" type="checkbox" checked> Solo mi voz: ignora a otras personas y a la TV (necesita tu voz grabada)</label>
+<label for="pvumbral">Exigencia al comparar la voz (0,35 relajado · 0,5 normal · 0,65 estricto)<input id="pvumbral" type="number" inputmode="decimal" step="0.05" min="0.2" max="0.9" placeholder="0.5"></label>
+<div style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="av-btn" id="pv-grabar">Grabar mi voz</button><button type="button" class="vbtn" id="pv-olvidar">Olvidar mi voz</button><button type="button" class="vbtn" id="pv-probar">Probar</button></div>
+<p class="foot" id="pv-st">Sin voz grabada</p>
+<p class="foot" id="pv-texto" hidden></p>
 </div>
 <div class="fields">
 <label for="cod">Código de acceso hablado (vacío = sin código)<input id="cod" type="text" inputmode="numeric" autocomplete="off" placeholder="ej. 0228"></label>
@@ -1240,8 +1248,10 @@ return out;
 function vozElegida(){
 var vs=(window.speechSynthesis&&speechSynthesis.getVoices())||[], es=vs.filter(function(v){ return /^es/i.test(v.lang); });
 var hombres=/jorge|juan|diego|carlos|enrique|pablo|andr|miguel|reed|eddy|rocko|grandpa|google espa/i;
+var mejor=/mejorad|enhanced|premium|siri/i;   // las voces "Mejorada"/"Premium" que se descargan en Ajustes suenan mucho más naturales
 var pref=['es-MX','es-US','es-ES'];
-for(var i=0;i<pref.length;i++){ var m=es.filter(function(v){ return v.lang.replace('_','-')===pref[i] && hombres.test(v.name); })[0]; if(m) return m; }
+for(var i=0;i<pref.length;i++){ var m=es.filter(function(v){ return v.lang.replace('_','-')===pref[i] && hombres.test(v.name) && mejor.test(v.name+' '+(v.voiceURI||'')); })[0]; if(m) return m; }
+for(var k=0;k<pref.length;k++){ var m2=es.filter(function(v){ return v.lang.replace('_','-')===pref[k] && hombres.test(v.name); })[0]; if(m2) return m2; }
 return es.filter(function(v){ return hombres.test(v.name); })[0]||es[0]||null;
 }
 var cap=$('voz-cap'), ctx=$('voz-txt');
@@ -1249,12 +1259,13 @@ function callar(){ if(window.speechSynthesis) speechSynthesis.cancel(); document
 var pausadoPorVoz=false;
 function soltarMic(){ if(rec){ pausadoPorVoz=true; try{ rec.abort(); }catch(_){} } }
 function retomarMic(){ pausadoPorVoz=false; if(micOn){ try{ rec&&rec.start(); }catch(e){ try{ rec=null; micOn=false; micIniciar(); }catch(_){} } } }
-function hablar(frases){
+/* encolar=true: no interrumpe lo que está sonando (p. ej. el dictado de una tarjeta), lo dice después. */
+function hablar(frases,encolar){
 if(window.speechSynthesis && speechSynthesis.speaking && frases && frases[0] && /Buen[oa]s (días|tardes|noches)/.test(frases[0])) return;
 if(!window.speechSynthesis||!frases.length||st.voz===false) return;
-speechSynthesis.cancel(); var v=vozElegida();
+if(!encolar) speechSynthesis.cancel(); var v=vozElegida();
 frases.forEach(function(f,i){
-var u=new SpeechSynthesisUtterance(f.replace(/Keyner/g,'Kéiner').replace(/USDT/g,'dólares'));
+var u=new SpeechSynthesisUtterance(f.replace(/Keyner/g,'Kéiner').replace(/USDT/g,'dólares').replace(/\s*\$/g,' dólares'));
 u.lang=v?v.lang:'es-MX'; if(v) u.voice=v; u.rate=1.0; u.pitch=0.9; u.volume=1;
 u.onstart=function(){ window.__hablo=true; document.body.classList.add('hablando'); cap.hidden=false; ctx.textContent=f; dicho=f; };
 if(i===frases.length-1){ u.onend=u.onerror=function(){ finVoz=Date.now(); if(despierto) atento=Math.max(atento,Date.now()+seguir()); setTimeout(function(){ if(!speechSynthesis.speaking){ document.body.classList.remove('hablando'); cap.hidden=true; } },900); }; }
@@ -1306,6 +1317,8 @@ function saludoCorto(){ return [saludoHora()+'.','¿En qué puedo ayudarle hoy, 
 function saludoHora(){ var h=new Date().getHours(); return h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches'; }
 function hablandoAhora(){ return (window.speechSynthesis&&speechSynthesis.speaking)||Date.now()-finVoz<700; }
 function norm(t){ return String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
+/* El dictado del iPhone escribe "Novax" de muchas formas: se corrige antes de decidir nada. */
+function arreglaDictado(t){ return String(t).replace(/\b(nobax|nobak|novak|novac|novacs|novaks|nobacs|no vax|no vaks|n[oó]vax)\b/gi,'Novax').replace(/\b(nova)\b(?=\s*(?:$|[,.?!]|y\b|de\b|en\b|hoy\b|este\b|ayer\b))/gi,'Novax'); }
 function esEco(t){
 var d=norm(dicho); if(!d) return false;
 var w=norm(t).split(/\s+/).filter(function(x){ return x.length>3; });
@@ -1338,7 +1351,7 @@ function frases(t){ return (t.match(/[^.!?¡¿]+[.!?]*/g)||[t]).map(function(x){
 function contexto(){
 var c={hoy:{dia:DIAS,diasDelMes:DMES,mes:CURID},tasas:{bcv:+g('bcv'),euro:+(SRV.tasas.euro||0),usdt:+g('usdt'),actualizada:SRV.tasas.ts?new Date(SRV.tasas.ts).toLocaleString('es-VE',{timeZone:'America/Caracas'}):'',horasDesdeRevision:Math.round(haceHoras(SRV.tasas.ts)*10)/10,origen:SRV.tasas.origen||'',fuente:SRV.tasas.fuente,fechaOficialBcv:SRV.tasas.fecha||''},drive:SRV.drive,mesActual:PRO,avisoAbono:AVI,
 historialMeses:HIST.map(function(h){return {mes:h.mes,total:h.total,cauchos:h.cauchos,servicio:h.servicio,disponible:h.disponible,abono:h.abono,cerrado:h.cerrado};}),
-negociosSinDatosTodavia:['Novax','Las Condes','Moto Lavado','Cafetín (Presidencia)'],
+negociosSinDatosTodavia:['Las Condes','Moto Lavado','Cafetín (Presidencia)'],
 salud:SAL_D.slice(0,14),metasSalud:{peso:st.metaPeso||null,grasa:st.metaGrasa||null}};
 return JSON.stringify(c,function(k,v){ return typeof v==='number'?Math.round(v*100)/100:v; });
 }
@@ -1409,20 +1422,23 @@ function alAzar(a){ return a[Math.floor(Math.random()*a.length)]; }
 var MULETILLAS=['Un momento.','Déjeme ver.','Voy.','Reviso eso.','Ajá, veamos.'];
 /* ===== MODO ALEXA: "Jarvis" lo despierta, responde, escucha unos segundos por si sigue y se vuelve a dormir ===== */
 var despierto=false, actx=null;
-function seguir(){ var s=parseFloat(st.seguir); return Math.max(4000,Math.min(120000,(isNaN(s)||s<=0?10:s)*1000)); }
+function seguir(){ var s=parseFloat(st.seguir); return Math.max(4000,Math.min(180000,(isNaN(s)||s<=0?45:s)*1000)); }
 function ventana(){ return seguir(); }
 /* ¿Suena a algo dicho a Jarvis, o es la TV / gente hablando? Se decide aquí, sin gastar IA. */
 var INTENCION=/(\?|^(qu[eé]|cu[aá]nt[oa]s?|cu[aá]l(es)?|c[oó]mo|d[oó]nde|cu[aá]ndo|qui[eé]n|por qu[eé])(?=\s|$)|\b(dime|dame|mu[eé]str|ens[eé]ñ|ponme|pon en|abre|abr[ií]|cierra|cierre|quita|busca|b[uú]scame|revisa|hazme|arma|calcula|actualiza|escanea|bloquea|recoge|lee|l[eé]eme|resumen|resume|compara|comp[aá]rame|ll[eé]vame|ve a|vete a|vamos a|necesito|quiero|puedes|podr[ií]as|ay[uú]dame|expl[ií]came|rec[uué]rdame|anota))/i;
-var TEMA=/\b(caja|cobr\w*|entr[oó]|entraron|semana|ayer|hoy|factur\w*|profit|clientes?|novax|nova|robust|caucho|cauchos|casanova|servicio|ventas?|venta|vendedor|cliente|inventario|preventa|profit|mes|meta|deuda|diego|molina|tata|corolla|abono|disponible|tasa|d[oó]lar|euro|binance|usdt|bcv|bol[ií]var|peso|grasa|pulso|sue[ñn]o|cuerpo|salud|tarjeta|pantalla|creaci[oó]n|creaciones|idea|plan|gasto|gastos|ingreso|ingresos|utilidad|margen|saldo|banco|cobrar|pagar|n[uú]mero|cifra|internet|instagram|clima|noticia|precio)\b/i;
+var TEMA=/\b(caja|cobr\w*|entr[oó]|entraron|semana|ayer|hoy|factur\w*|profit|clientes?|novax|nova|nobax|novak|novac|robust|caucho|cauchos|casanova|servicio|ventas?|venta|vendedor|cliente|inventario|preventa|profit|mes|meta|deuda|diego|molina|tata|corolla|abono|disponible|tasa|d[oó]lar|euro|binance|usdt|bcv|bol[ií]var|peso|grasa|pulso|sue[ñn]o|cuerpo|salud|tarjeta|pantalla|creaci[oó]n|creaciones|idea|plan|gasto|gastos|ingreso|ingresos|utilidad|margen|saldo|banco|cobrar|pagar|n[uú]mero|cifra|internet|instagram|clima|noticia|precio|utilidad|rentab\w*|escenario|an[aá]lisis|analiza|aconsej\w*|recomiend\w*|consejo|estrategia|compar\w*|proyecci[oó]n|tendencia|cu[aá]nto|cu[aá]ntos|cu[aá]ntas|cu[aá]l|cu[aá]les|tarjeta|tabla|cuadro|l[eé]eme|lee)\b/i;
 var CORTA=/^(s[ií]|no|dale|ok|okey|listo|ya|claro|eso|exacto|correcto|perfecto|bueno|vale|gracias|cierra|ci[eé]rrala|qu[ií]tala|quita eso|recoge|sigue|contin[uú]a|otra vez|repite|m[aá]s|menos|el primero|el segundo|la otra|esa|ese)[\s.!,]*$/i;
 function esParaJarvis(t,enConversacion){
 t=t.trim(); var n=t.split(/\s+/).length;
-if(n>28) return false;                                     // parrafadas largas = TV o gente
+if(n>40) return false;                                     // parrafadas largas = TV o gente
 if(enConversacion){ if(CORTA.test(t)&&n<=4) return true;
 /* respuesta al "¿desea algo más?" */ if(esperaMas&&n<=5&&/^(no|nada|listo|ya|gracias|as[ií] est[aá]|estoy bien|todo bien|eso es todo)\b/i.test(t)) return true;
  if(n<=6&&/^(y |pero |entonces |ahora )?(el|la|los|las|de|del|con|para|en)\b/i.test(t)&&!TEMA.test(t)) return false; return INTENCION.test(t)||TEMA.test(t); }
-if(Date.now()-ultRespuesta<120000 && n<=20 && (INTENCION.test(t)||TEMA.test(t))) return true;   /* repregunta poco después de una respuesta: sigue el hilo */
-return n>=2 && INTENCION.test(t) && TEMA.test(t) || (INTENCION.test(t) && n<=8);
+if(Date.now()-ultRespuesta<300000 && n<=25 && (INTENCION.test(t)||TEMA.test(t))) return true;   /* repregunta en los 5 minutos siguientes a una respuesta: sigue el hilo */
+/* Modo conversación: si habla de sus temas (Novax, ventas, deudas, tasas, salud...) o suena a pregunta u orden, se le pasa a la IA,
+   que todavía puede descartarlo con IGNORAR si era la TV o gente hablando. Solo se filtra aquí lo que claramente no va con él. */
+if(TEMA.test(t) && n<=30) return true;
+return INTENCION.test(t) && n<=12;
 }
 
 function tono(sube){
@@ -1446,7 +1462,7 @@ despierto=false; document.body.classList.remove('jarvis-on'); if(!sinTono) tono(
 function estaDespierto(){ return despierto&&(Date.now()<atento||hablandoAhora()||ocupado||creOcupado); }
 setInterval(function(){ if(despierto&&!estaDespierto()) dormir(); },1000);
 /* Solo dice "un momento" si la respuesta se demora: así no suena lento cuando contesta rápido. */
-function muletillaSiTarda(lista,ms){ var t=setTimeout(function(){ hablar([alAzar(lista)]); },ms||1800); return function(){ clearTimeout(t); }; }
+function muletillaSiTarda(lista,ms){ var t=setTimeout(function(){ if(!hablandoAhora()) hablar([alAzar(lista)]); },ms||1800); return function(){ clearTimeout(t); }; }
 function preguntarIA(q,deVoz){
 if(VISTA==='cre'){ creEnviar(q,deVoz); return; }
 if(ocupado){ pendiente=q; $('sv-asis').textContent='Anotado, respondo enseguida'; return; }
@@ -1456,11 +1472,12 @@ if(HCARDS.length) holoCerrar();                 // tarea nueva: se recoge lo ant
 var pideVer=VER_RE.test(q);
 var yaMostro=false; try{ yaMostro=tarjetaRapida(q); }catch(e){}
 document.body.classList.add('pensando'); micEstado('Analizando…','escucha');
-var paraMul=muletillaSiTarda(MULETILLAS,1800);
+var paraMul0=muletillaSiTarda(MULETILLAS,1800), paraMul1=muletillaSiTarda(['Sigo con los números, un momento.','Estoy calculando, deme unos segundos.','Ya casi, estoy cruzando los datos.'],14000);
+var paraMul=function(){ paraMul0(); paraMul1(); };
 // Si la respuesta se pierde (salió de la app, se cayó la señal), Jarvis no se queda trabado esperando para siempre.
 var miPeticion=++PETICION;
 var vigia=setTimeout(function(){ if(miPeticion!==PETICION||!ocupado) return; PETICION++; ocupado=false; pendiente=null; document.body.classList.remove('pensando'); paraMul();
-var m='Se me cayó la conexión. ¿Me lo repite?'; chatAdd('assistant',m); hablar([m]); micListo(); },45000);
+var m='Se me cayó la conexión. ¿Me lo repite?'; chatAdd('assistant',m); hablar([m]); micListo(); },75000);
 google.script.run.withSuccessHandler(function(r){
 if(miPeticion!==PETICION) return;               // llegó tarde: ya se descartó
 clearTimeout(vigia);
@@ -1477,23 +1494,48 @@ var sep=separaAcciones(String(obj.texto||'No tengo respuesta.'));
 sep.acciones.forEach(function(c){ try{ ejecutar(c); }catch(e){} });
 var txt=sep.texto||'Listo.';
 var conTarjeta=yaMostro;
-if(obj.tarjetas&&obj.tarjetas.length&&!yaMostro){ holoMostrar(obj.tarjetas,'Jarvis'); conTarjeta=true; }   // si ya salió la tarjeta exacta del servidor, no se le encima otra armada por la IA
+if(obj.tarjetas&&obj.tarjetas.length&&!yaMostro){ holoMostrar(obj.tarjetas,'Jarvis'); dictar(obj.tarjetas); conTarjeta=true; }   // si ya salió la tarjeta exacta del servidor, no se le encima otra armada por la IA
 else if(pideVer&&!yaMostro){ holoTarjeta({tipo:'texto',titulo:'Jarvis',texto:txt},'Jarvis'); conTarjeta=true; }   // pidió verlo: siempre aparece algo
 if((obj.mostrar&&obj.mostrar.length)||(obj.fuentes&&obj.fuentes.length)){ pantalla(obj.mostrar,obj.fuentes,q); conTarjeta=true; }
 chatAdd('assistant',txt); CHAT.push({r:'assistant',t:txt,ts:Date.now()}); if(CHAT.length>40) CHAT=CHAT.slice(-40); guardaChat();
 ultRespuesta=Date.now();
 var dichos=frases(txt);
 if(conTarjeta&&deVoz&&!/\?\s*$/.test(txt)){ dichos.push(alAzar(['¿Desea algo más?','¿Algo más, señor?','¿Necesita algo más?'])); esperaMas=Date.now(); }
-hablar(dichos); micListo();
+hablar(dichos,true); micListo();   // en cola: si está dictando una tarjeta, el comentario va después
 if(pendiente){ var sig=pendiente; pendiente=null; setTimeout(function(){ preguntarIA(sig,true); },400); }
 }).withFailureHandler(function(e){
 if(miPeticion!==PETICION) return; clearTimeout(vigia);
 ocupado=false; document.body.classList.remove('pensando'); paraMul(); var m='No pude conectarme con el servidor.'; chatAdd('assistant',m+' ('+(e&&e.message||e)+')'); hablar([m]); micListo();
-}).preguntar((yaMostro?'[ya hay una tarjeta en pantalla con esos datos: coméntalos en dos frases, sin repetir todos los números y sin TARJETA] ':'')+q,contexto(),CHAT.slice(-11,-1).map(function(m){ return {r:m.r,t:m.t}; }),!!deVoz);
+}).preguntar((yaMostro?'[la tarjeta con esos datos ya está en pantalla y el sistema ya la leyó en voz alta: no repitas los números; da tu lectura o consejo en una o dos frases, sin TARJETA] ':'')+q,contexto(),CHAT.slice(-11,-1).map(function(m){ return {r:m.r,t:m.t}; }),!!deVoz);
 }
 
 /* ===== TARJETAS HOLOGRÁFICAS ===== */
 var HOLO_L=$('tarjetas'), HCARDS=[], esperaMas=0, PETICION=0, micVivo=false, ultRespuesta=0;
+/* ===== DICTADO: lo que se pone en una tarjeta también se dice, completo, para que no tenga que mirar ===== */
+function vozNum(v){
+if(typeof v==='number') return String(Math.round(v*100)/100).replace('.',',');
+var s=String(v==null?'':v).trim();
+s=s.replace(/(\d)\.(?=\d{3}(?!\d))/g,'$1');                       // 1.240 -> 1240 (la voz lo lee como mil doscientos cuarenta)
+s=s.replace(/\s*\$/g,' dólares').replace(/USDT/g,' dólares').replace(/\s*%/g,' por ciento').replace(/€/g,' euros').replace(/\bvs\.?\b/gi,'contra').replace(/\s*[·•]\s*/g,', ');
+return s.replace(/\s+/g,' ').trim();
+}
+function dictarTarjeta(t){
+if(!t) return [];
+if(typeof t==='string'){ try{ t=JSON.parse(t); }catch(e){ return [t]; } }
+var tipo=String(t.tipo||'texto').toLowerCase(), out=[], tit=(String(t.titulo||'')+(t.sub?', '+t.sub:'')).replace(/\s*[·•|]\s*/g,', ');
+if(tit) out.push(tit+'.');
+if(tipo==='cifras'&&t.items){ t.items.slice(0,8).forEach(function(x){ var d=String(x.d||x.delta||''); out.push(String(x.k||x.nombre||'')+': '+vozNum(x.v!==undefined?x.v:x.valor)+(d?', '+vozNum(d):'')+'.'); }); }
+else if(tipo==='tabla'&&t.filas){ var cols=t.cols||t.columnas||[];
+t.filas.slice(0,8).forEach(function(f){ f=f||[]; var partes=[]; for(var j=0;j<f.length;j++){ if(f[j]===''||f[j]==null||f[j]==='—') continue; partes.push((j>0&&cols[j]?String(cols[j])+' ':'')+vozNum(f[j])); } if(partes.length) out.push(partes.join(', ')+'.'); });
+if(t.filas.length>8) out.push('Y '+(t.filas.length-8)+' más en la tarjeta.'); }
+else if(tipo==='lista'&&t.items){ t.items.slice(0,10).forEach(function(x,i){ out.push((i+1)+'. '+vozNum(typeof x==='string'?x:(x.t||x.texto||''))+'.'); }); }
+else if((tipo==='barras'||tipo==='grafico')&&t.serie){ var u=t.unidad||''; t.serie.slice(0,10).forEach(function(x){ out.push(String(x.n||x.nombre||'')+': '+vozNum(x.v)+(u?' '+vozNum(u):'')+'.'); }); }
+else if(t.texto||t.t) out.push(String(t.texto||t.t));
+return out;
+}
+/* Lee una lista de tarjetas. encolar=true las dice después de lo que esté sonando. */
+function dictar(lista,encolar){ var fr=[]; (lista||[]).forEach(function(t){ fr=fr.concat(dictarTarjeta(t)); }); if(fr.length) hablar(fr,encolar); return fr.length; }
+function dictarEnPantalla(){ if(!HCARDS.length) return false; dictar([HCARDS[HCARDS.length-1].t]); return true; }
 function hnum(v){ if(typeof v==='number') return (Math.round(v*100)/100).toLocaleString('es-VE'); return esc(v); }
 function hcuerpo(t){
 var tipo=String(t.tipo||'texto').toLowerCase(), i=0, h='';
@@ -1614,7 +1656,8 @@ filas.push(['Sr. Molina',usd(d.SrMolina),f.SrMolina?'se salda '+f.SrMolina:'']);
 filas.push(['Tata',usd(d.Tata),f.Tata?'se salda '+f.Tata:'']);
 filas.push(['Corolla',usd(pl.saldoCorolla),(pl.cuotasCorollaRestantes||0)+' cuotas']);
 filas.push(['Diego (asumida)',usd(d.Diego),'es de Novax; la pagas tú para cobrar los intereses']);
-holoTarjeta({tipo:'tabla',titulo:'Tus deudas hoy',sub:pl.libreDeDeudas?('Libre de deudas: '+pl.libreDeDeudas):'',cols:['A quién','Monto','Nota'],filas:filas},'Jarvis');
+var tdd={tipo:'tabla',titulo:'Tus deudas hoy',sub:pl.libreDeDeudas?('Libre de deudas: '+pl.libreDeDeudas):'',cols:['A quién','Monto','Nota'],filas:filas};
+holoTarjeta(tdd,'Jarvis'); dictar([tdd]);
 }).withFailureHandler(function(e){ holoTarjeta({tipo:'texto',titulo:'Tus deudas',texto:'No pude leer Novax: '+(e&&e.message||e)},'Jarvis'); }).tarjetasNovax('deuda novax');
 return true;
 }
@@ -1622,10 +1665,10 @@ function tarjetaRapida(q){
 if(TODAS_DEUDAS_RE.test(q)) return tarjetaTodasDeudas();
 if(!VER_RE.test(q)) return false;
 if((/\b(deb[oe]|debe|deuda)\b/i.test(q) && /\b(n[oó]va\w*|n[oó]ba\w*|novak|novac|no va[xks])\b/i.test(q)) || !/\b(deb[oe]|debe|deuda|deudas|abon\w*|fondo|pr[eé]stamo|diego)\b/i.test(q) && (NOVAX_RE.test(q) || (DIA_RE.test(q) && /\b(vent|vest)|factur/i.test(q)))){   // Novax vive en el servidor: se pide sin pasar por la IA
-google.script.run.withSuccessHandler(function(l){ if(l&&l.length) holoMostrar(l,'Novax'); else holoTarjeta({tipo:'texto',titulo:'Novax',texto:'Novax no devolvió datos para esto.'},'Novax'); }).withFailureHandler(function(e){ holoTarjeta({tipo:'texto',titulo:'Novax',texto:'Error leyendo Novax: '+(e&&e.message||e)},'Novax'); }).tarjetasNovax(q);
+google.script.run.withSuccessHandler(function(l){ if(l&&l.length){ holoMostrar(l,'Novax'); dictar(l); } else holoTarjeta({tipo:'texto',titulo:'Novax',texto:'Novax no devolvió datos para esto.'},'Novax'); }).withFailureHandler(function(e){ holoTarjeta({tipo:'texto',titulo:'Novax',texto:'Error leyendo Novax: '+(e&&e.message||e)},'Novax'); }).tarjetasNovax(q);
 return true;
 }
-for(var i=0;i<TEMAS.length;i++){ if(TEMAS[i][0].test(q)){ var t=null; try{ t=TEMAS[i][1](); }catch(e){} if(t){ holoTarjeta(t,'Mis ingresos'); return true; } } }
+for(var i=0;i<TEMAS.length;i++){ if(TEMAS[i][0].test(q)){ var t=null; try{ t=TEMAS[i][1](); }catch(e){} if(t){ holoTarjeta(t,'Mis ingresos'); dictar([t]); return true; } } }
 return false;
 }
 
@@ -1819,7 +1862,7 @@ if(IDEA===idea) pintaHilo(); hablar([m]); micListo();
 }
 
 function procesar(txt){
-txt=txt.trim(); if(!txt) return;
+txt=arreglaDictado(txt.trim()); if(!txt) return;
 despierta();
 if(modoCodigo){
 $('sv-asis').textContent='Esperando el código';
@@ -1868,6 +1911,7 @@ esperaMas=0; holoCerrar(); ejecutar('cerrar todo'); if(VISTA!=='ing') irVista('i
 hablar([alAzar(['A la orden.','Con gusto.','Cuando me necesite.','Aquí estoy.'])]); atento=0; setTimeout(function(){ dormir(); },1500); return;
 }
 if(/\b(reporte|resumen|informe)\b/i.test(q) && /\b(hoy|d[ií]a|dame|cu[aá]l|dime|el reporte|el resumen|el informe)\b/i.test(q) && q.split(/\s+/).length<=10){ hablar(SAL.slice(1).length?SAL.slice(1):SAL); return; }   /* SAL se arma al abrir, comparando con la visita anterior */
+if(HCARDS.length && q.split(/\s+/).length<=9 && /\b(l[eé]e|l[eé]eme|l[eé]emela|l[eé]ela|dicta|d[ií]ctame|rep[ií]te|rep[ií]temela|rep[ií]tela|vuelve a leer)\b/i.test(q) && (/\b(tarjeta|tabla|cuadro|cifras|lista|eso|esa|esta|pantalla|n[uú]meros|datos)\b/i.test(q) || q.split(/\s+/).length<=3)){ callar(); dictarEnPantalla(); return; }
 preguntarIA(q,true);
 }
 function bloquear(hablando){
@@ -1876,7 +1920,7 @@ modoCodigo=true; intentos=0; document.body.classList.add('velado');
 micEstado('Esperando el código','escucha');
 if(hablando!==false) hablar([alAzar(['Pantalla bloqueada.','Listo, todo cerrado.','Cerrando, señor.'])]);
 }
-function micListo(){ if(micOn && !ocupado) micEstado(despierto?'Lo escucho…':(st.libre!==false?'Escuchando':'En espera · diga "'+(st.clave||'jarvis')+'"'),'escucha'); }
+function micListo(){ if(micOn && !ocupado) micEstado((despierto?'Lo escucho…':(st.libre!==false?'Escuchando':'En espera · diga "'+(st.clave||'jarvis')+'"'))+(PV.activo?' · solo tu voz':''),'escucha'); }
 function micIniciar(){
 if(!SR){ micEstado('Este navegador no reconoce voz · escribe en Asistente','off'); return; }
 if(micOn && rec) return;
@@ -1890,6 +1934,7 @@ if(!modoCodigo && fin && conf>0 && conf<0.25 && !claveRe().test(nuevo) && !/\b(c
 if(hablandoAhora()){
 // Mientras habla, lo interrumpe su nombre, "para/cállate" o cualquier orden clara para él (la TV, la gente y su eco no lo cortan)
 if(esEco(nuevo)){ consumido=full.length; return; }
+if(!modoCodigo && !vozAutorizada()){ consumido=full.length; return; }     // otra voz: no lo interrumpe
 var corta=/^(para|p[aá]rale|c[aá]llate|basta|detente|silencio|stop|espera|ya)\b/i.test(nuevo);
 if(!(claveRe().test(nuevo) || corta || esParaJarvis(nuevo,true))){ consumido=full.length; return; }
 callar(); finVoz=0;
@@ -1903,16 +1948,325 @@ if(modoCodigo&&fin) ms=250;                     // el código: apenas termine de
 else if(fin&&!falta) ms=Math.min(350,ms);           // el iPhone ya cerró la frase y está completa: enseguida
 else if(pregunta&&!falta) ms=Math.min(800,ms);  // suena a pregunta u orden completa: rápido
 else if(falta) ms=ms+900;                      // quedó colgada ("...y el", "...pero"): le da tiempo
-silT=setTimeout(function(){ consumido=full.length; procesar(nuevo); },ms);
+silT=setTimeout(function(){ consumido=full.length;
+if(!modoCodigo && !vozAutorizada()){ $('sv-asis').textContent='Ignoré (no es tu voz'+(PV.ultJuicio?' · '+Math.round(PV.ultJuicio.prom*100)+' %':'')+'): '+nuevo.slice(0,40); return; }
+procesar(nuevo); },ms);
 };
 rec.onend=function(){ consumido=0; if(micOn) setTimeout(function(){ try{ rec.start(); }catch(_){} },250); };
-rec.onerror=function(e){ if(/not-allowed|service-not-allowed|audio-capture/.test(e.error)){ micOn=false; rec=null; micEstado('Micrófono bloqueado · toca la pantalla o escribe en Asistente','off'); } };
+rec.onerror=function(e){ if(/not-allowed|service-not-allowed|audio-capture/.test(e.error)){ micOn=false; rec=null;
+if(pvFalloDictado()) return;
+micEstado('Micrófono bloqueado · toca la pantalla o escribe en Asistente','off'); } };
 rec.onstart=rec.onaudiostart=function(){ micVivo=true; };
 micOn=true; micVivo=false;
 try{ rec.start(); micListo(); }catch(err){ micOn=false; rec=null; micEstado('No pude abrir el micrófono','off'); }
 // Al volver de otra app, iOS a veces "arranca" el micrófono sin que escuche de verdad: si no confirma, se avisa en vez de quedar colgado.
-setTimeout(function(){ if(micOn && !micVivo){ try{ rec&&rec.abort(); }catch(_){} rec=null; micOn=false; micEstado('Toca la pantalla para volver a escuchar','off'); } },3000);
+setTimeout(function(){ if(micOn && !micVivo){ try{ rec&&rec.abort(); }catch(_){} rec=null; micOn=false; if(pvFalloDictado()) return; micEstado('Toca la pantalla para volver a escuchar','off'); } },3000);
 }
+/* ===== SOLO MI VOZ (Picovoice Eagle): compara la voz que habla con la de Keyner y descarta las demás =====
+   Corre en paralelo al dictado del iPhone. Si el teléfono no deja usar el micrófono para las dos cosas a la vez,
+   se apaga solo y Jarvis sigue funcionando como antes. La clave y la huella de voz se guardan solo en este teléfono. */
+var PV={ key:'', perfil:null, eagle:null, preparando:null, profiler:null, motor:null, activo:false, enrolando:false, ocupado:false, scores:[], frames:0, ultFrame:0, ultVoz:0, error:'', cargando:null, incompat:false, probando:false, toqueListo:false, ultJuicio:null };
+function pvLs(k,v){ try{ if(v!==undefined){ if(v===null) localStorage.removeItem(k); else localStorage.setItem(k,v); } return localStorage.getItem(k); }catch(e){ return null; } }
+PV.key=(pvLs('pv_key')||'').trim(); PV.perfil=pvLs('pv_perfil')||null; PV.incompat=(Date.now()-(+pvLs('pv_incompat')||0))<7*86400000;
+function pvB64(u8){ var s=''; for(var i=0;i<u8.length;i+=0x8000) s+=String.fromCharCode.apply(null,u8.subarray(i,i+0x8000)); return btoa(s); }
+function pvDeB64(b){ var s=atob(b), u=new Uint8Array(s.length); for(var i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return u; }
+function pvMsg(e){ return (e&&(e.shortMessage||e.message))||String(e); }
+/* Motor: con clave de Picovoice usa Eagle; sin clave usa el modelo propio (plan B). */
+function pvUsaEagle(){ return !!PV.key; }
+function pvPerfilEagle(){ return !!PV.perfil&&PV.perfil!=='onnx'; }
+function pvHayHuella(){ return pvUsaEagle()?pvPerfilEagle():!!VZ.perfil; }
+var PV_LIBS=[['WebVoiceProcessor',['https://unpkg.com/@picovoice/web-voice-processor@4.0.10/dist/iife/index.min.js','https://cdn.jsdelivr.net/npm/@picovoice/web-voice-processor@4.0.10/dist/iife/index.min.js']],
+             ['EagleWeb',['https://unpkg.com/@picovoice/eagle-web@3.0.1/dist/iife/index.min.js','https://cdn.jsdelivr.net/npm/@picovoice/eagle-web@3.0.1/dist/iife/index.min.js']]];
+var PV_MODELO={ publicPath:'https://raw.githubusercontent.com/Picovoice/eagle/main/lib/common/eagle_params.pv', customWritePath:'eagle_params_v1', version:1 };
+var PV_TEXTO='Lea esto con su voz normal, sin apurarse, hasta que llegue a 100 %: "Buenos días. Hoy quiero revisar cómo van las ventas de Novax, cuánto entró en la caja de Maracay y qué cuentas por cobrar están vencidas. Después vemos el inventario de las tiendas, la mercancía que viene en tránsito desde China y las tasas del dólar de hoy. Al final, dígame qué me aconseja para mejorar el margen de este mes y cuánto le debo a Novax como accionista." Si no llega a 100, vuelva a leerlo.';
+function cargaScript(urls,i){ return new Promise(function(ok,fail){ i=i||0; if(i>=urls.length) return fail(new Error('No pude descargar '+urls[0])); var s=document.createElement('script'); s.src=urls[i]; s.onload=function(){ ok(); }; s.onerror=function(){ s.remove(); cargaScript(urls,i+1).then(ok,fail); }; document.head.appendChild(s); }); }
+/* En el build IIFE el global WebVoiceProcessor es un paquete: la clase está adentro. */
+function WVP(){ var w=window.WebVoiceProcessor; return (w&&w.WebVoiceProcessor)?w.WebVoiceProcessor:w; }
+function pvCargar(){ if(!PV.cargando) PV.cargando=PV_LIBS.reduce(function(pr,l){ return pr.then(function(){ return window[l[0]]?null:cargaScript(l[1]); }); },Promise.resolve()).catch(function(e){ PV.cargando=null; throw e; }); return PV.cargando; }
+function pvEstado(t){
+var el=$('pv-st'); if(!el) return;
+if(t){ el.textContent=t; return; }
+if(PV.enrolando) return;
+if(!pvHayHuella()) el.textContent=pvUsaEagle()?'Clave de Picovoice guardada. Ahora toca "Grabar mi voz" y lee el texto.':'Sin voz grabada. Toca "Grabar mi voz" y lee el texto (no necesita cuenta ni clave).';
+else if(st.soloMiVoz===false) el.textContent='Voz grabada. "Solo mi voz" está apagado: responde a cualquiera.';
+else if(PV.incompat) el.textContent='Voz grabada, pero este teléfono no deja verificar la voz mientras dicta. Jarvis responde a cualquiera. (Toca "Probar" para reintentar.)';
+else if(PV.error) el.textContent='Voz grabada. Verificación apagada por un error: '+PV.error;
+else if(PV.activo) el.textContent='Verificando tu voz ('+(pvUsaEagle()?'Picovoice':'motor propio')+') · '+(PV.frames?(PV.ultVoz?'última voz hace '+Math.round((Date.now()-PV.ultVoz)/1000)+' s':'esperando que hables'):'esperando audio del micrófono…');
+else if(PV.preparando||VZ.preparando) el.textContent='Preparando la verificación de voz…';
+else el.textContent='Voz grabada. La verificación arranca al tocar la pantalla.';
+}
+setInterval(function(){ if(PV.activo&&!PV.enrolando&&!PV.probando) pvEstado(); },3000);
+/* Puntaje de la voz oída en los últimos ms (0 = otra persona, 1 = Keyner). null si Eagle no oyó voz. */
+function pvScoreReciente(ms){ var ahora=Date.now(), l=PV.scores.filter(function(x){ return ahora-x.t<(ms||4500); }); if(!l.length) return null; var m=0, mx=0; l.forEach(function(x){ m+=x.s; if(x.s>mx) mx=x.s; }); return {prom:m/l.length, max:mx, n:l.length}; }
+function pvUmbral(){ var u=parseFloat(st.pvUmbral); return isNaN(u)?0.5:Math.max(0.2,Math.min(0.9,u)); }
+/* true = se le hace caso. Si la verificación no está activa o Eagle no está recibiendo audio, no bloquea nada. */
+function vozAutorizada(){
+if(!PV.activo||PV.enrolando) return true;
+if(Date.now()-PV.ultFrame>6000) return true;           // Eagle sin audio (el iPhone se lo quitó): no se juzga
+var r=pvScoreReciente(4500); if(!r) return true;         // no oyó voz suficiente para comparar
+var u=pvUmbral(); PV.ultJuicio={prom:Math.round(r.prom*100)/100,max:Math.round(r.max*100)/100,ok:(r.prom>=u||r.max>=u+0.25)};
+return PV.ultJuicio.ok;
+}
+function pvMotorReconocer(eg,perfil){
+return { onmessage:function(e){ if(!e||!e.data||e.data.command!=='process') return; PV.frames++; PV.ultFrame=Date.now(); if(PV.ocupado) return; PV.ocupado=true;
+eg.process(e.data.inputFrame,perfil).then(function(sc){ PV.ocupado=false; if(sc&&sc.length){ PV.scores.push({t:Date.now(),s:sc[0]}); PV.ultVoz=Date.now(); if(PV.scores.length>600) PV.scores.splice(0,300); if(PV.probando) pvEstado('Probando · ahora mismo: '+Math.round(sc[0]*100)+' % parecido a tu voz (exigencia '+Math.round(pvUmbral()*100)+' %)'); } }).catch(function(err){ PV.ocupado=false; PV.error=pvMsg(err); }); } };
+}
+/* Carga las librerías y crea el motor (sin tocar el micrófono). Se hace temprano para que al tocar la pantalla solo falte abrir el micrófono. */
+function pvPreparar(){
+if(!pvUsaEagle()) return VZ.perfil?vzPreparar():Promise.resolve(null);
+if(!pvPerfilEagle()) return Promise.resolve(null);
+if(PV.eagle) return Promise.resolve(PV.eagle);
+if(PV.preparando) return PV.preparando;
+pvEstado();
+PV.preparando=pvCargar().then(function(){ return EagleWeb.EagleWorker.create(PV.key,PV_MODELO).catch(function(){ return EagleWeb.Eagle.create(PV.key,PV_MODELO); }); })
+.then(function(eg){ PV.eagle=eg; PV.preparando=null; pvEstado(); return eg; })
+.catch(function(e){ PV.preparando=null; PV.error=pvMsg(e); pvEstado(); throw e; });
+return PV.preparando;
+}
+/* Activa la verificación. Conviene llamarla desde un toque del usuario: iOS solo abre el audio con un gesto. */
+function pvIniciar(){
+if(PV.activo||PV.enrolando||!pvHayHuella()||st.soloMiVoz===false||PV.incompat){ pvEstado(); return Promise.resolve(false); }
+if(!pvUsaEagle()){
+if(!VZ.listo){ vzPreparar().then(function(){ pvPedirToque(); }).catch(function(){}); return Promise.resolve(false); }
+PV.error=''; PV.scores=[];
+return vzIniciar().then(function(ok){ if(ok){ PV.activo=true; pvEstado(); micListo(); pvComprobarAudio(); } return ok; }).catch(function(e){ PV.activo=false; PV.error=pvMsg(e); pvEstado(); return false; });
+}
+if(!PV.eagle){ pvPreparar().then(function(){ pvPedirToque(); }).catch(function(){}); return Promise.resolve(false); }
+var eg=PV.eagle, perfil={bytes:pvDeB64(PV.perfil)};
+try{ WVP().setOptions({frameLength:eg.minProcessSamples,outputSampleRate:eg.sampleRate},true); }catch(e){}
+PV.motor=pvMotorReconocer(eg,perfil); PV.frames=0; PV.ultFrame=0; PV.scores=[]; PV.error='';
+return WVP().subscribe(PV.motor).then(function(){ PV.activo=true; pvEstado(); micListo(); pvComprobarAudio(); return true; })
+.catch(function(e){ PV.motor=null; PV.activo=false; PV.error=pvMsg(e); pvEstado(); return false; });
+}
+/* Pide un toque para arrancar el audio de verificación (iOS lo exige la primera vez). */
+function pvPedirToque(){
+if(PV.toqueListo||PV.activo) return; PV.toqueListo=true;
+pvEstado('Toca la pantalla para activar la verificación de voz');
+var f=function(){ document.removeEventListener('touchend',f); document.removeEventListener('click',f); PV.toqueListo=false; pvIniciar(); };
+document.addEventListener('touchend',f); document.addEventListener('click',f);
+}
+/* Si a los segundos no llega audio, intenta reanudar el AudioContext (iOS lo deja en pausa si no hubo gesto) y, si no, pide un toque. */
+function pvComprobarAudio(){
+setTimeout(function(){ if(!PV.activo||PV.frames>0) return;
+try{ var ac=pvUsaEagle()?WVP().audioContext:actx; if(ac&&ac.state!=='running') ac.resume().catch(function(){}); }catch(e){}
+setTimeout(function(){ if(!PV.activo||PV.frames>0) return;
+pvEstado('El micrófono de verificación no arrancó · toca la pantalla');
+var f=function(){ document.removeEventListener('touchend',f); document.removeEventListener('click',f); try{ var ac=pvUsaEagle()?WVP().audioContext:actx; if(ac) ac.resume(); }catch(e){} setTimeout(function(){ if(PV.activo&&PV.frames===0){ pvPausar(); pvIniciar(); } },1500); };
+document.addEventListener('touchend',f); document.addEventListener('click',f);
+},3000);
+},3000);
+}
+function pvPausar(){ if(PV.motor){ try{ WVP().unsubscribe(PV.motor); }catch(e){} } PV.motor=null; if(typeof vzParar==='function'&&!VZ.enrolando) vzParar(); PV.activo=false; PV.probando=false; var b=$('pv-probar'); if(b) b.textContent='Probar'; }
+function pvIncompatible(motivo){ pvPausar(); PV.incompat=true; pvLs('pv_incompat',String(Date.now())); PV.error=motivo||''; pvEstado(); micListo(); }
+/* Enrolar: graba la voz leyendo un texto hasta que Eagle llegue a 100 % y guarda la huella en este teléfono.
+   Primer toque: prepara (descarga el modelo). Segundo toque: abre el micrófono y graba (iOS exige el gesto). */
+function pvEnrolar(){
+if(PV.enrolando||VZ.enrolando) return;
+if(!pvUsaEagle()){ vzEnrolar(); return; }
+if(!PV.profiler){
+pvEstado('Preparando (la primera vez descarga el modelo, unos segundos)…');
+pvCargar().then(function(){ return EagleWeb.EagleProfiler.create(PV.key,PV_MODELO); })
+.then(function(p){ PV.profiler=p; pvEstado('Listo. Toca "Grabar mi voz" otra vez y empieza a leer el texto en voz alta.'); })
+.catch(function(e){ pvEstado('No pude preparar la grabación: '+pvMsg(e)); });
+return;
+}
+var prof=PV.profiler, motor=null, pct=0, cadena=Promise.resolve(), ultimo=0, vigia=null;
+PV.enrolando=true; pvPausar(); callar();
+if(rec){ micOn=false; try{ rec.abort(); }catch(_){} rec=null; }   // el dictado se apaga mientras graba (si no, Jarvis contestaría al texto)
+var tx=$('pv-texto'); if(tx){ tx.hidden=false; tx.textContent=PV_TEXTO; }
+function termina(msg){ clearTimeout(vigia); PV.enrolando=false; if(motor){ try{ WVP().unsubscribe(motor); }catch(e){} } if(tx) tx.hidden=true; pvEstado(msg); setTimeout(function(){ if(!micOn) micIniciar(); pvPreparar().then(function(){ pvPedirToque(); }).catch(function(){}); },600); }
+try{ WVP().setOptions({frameLength:prof.frameLength,outputSampleRate:prof.sampleRate},true); }catch(e){}
+motor={ onmessage:function(e){ if(!e||!e.data||e.data.command!=='process'||!PV.enrolando) return; var fr=e.data.inputFrame;
+cadena=cadena.then(function(){ if(!PV.enrolando) return; return prof.enroll(fr).then(function(x){ pct=+x||0; if(Date.now()-ultimo>400){ ultimo=Date.now(); pvEstado('Grabando tu voz… '+Math.round(pct)+' %'+(pct<100?' · siga leyendo':'')); }
+if(pct>=100){ PV.enrolando=false; return prof.export().then(function(perfil){ PV.perfil=pvB64(perfil.bytes); pvLs('pv_perfil',PV.perfil); PV.eagle=null; try{ prof.release(); }catch(e){} PV.profiler=null; termina('Voz guardada. Desde ahora solo te responde a ti. Toca la pantalla para activarlo (y "Probar" para verlo en vivo).'); }); } }); }).catch(function(err){ if(PV.enrolando) termina('No pude grabar: '+pvMsg(err)); }); } };
+pvEstado('Grabando tu voz… 0 % · lea el texto en voz alta');
+prof.reset().catch(function(){}).then(function(){ return WVP().subscribe(motor); }).catch(function(e){ termina('No pude abrir el micrófono para grabar: '+pvMsg(e)); });
+vigia=setTimeout(function(){ if(PV.enrolando){ termina('Se agotó el tiempo sin llegar a 100 % ('+Math.round(pct)+' %). Busque un sitio silencioso, hable más cerca y vuelva a intentar.'); } },150000);
+}
+/* Si el dictado del iPhone se cae dos veces seguidas mientras Eagle sí está recibiendo audio, es que no se pueden usar los dos a la vez:
+   se apaga Eagle (una semana, o hasta que toque "Probar") y el dictado vuelve a arrancar solo. Devuelve true si se encargó del fallo. */
+function pvFalloDictado(){
+if(!PV.activo||!PV.frames||Date.now()-PV.ultFrame>4000) return false;
+PV.fallosSR=(PV.fallosSR||0)+1;
+if(PV.fallosSR<2){ setTimeout(function(){ if(!micOn) micIniciar(); },700); return true; }   // primer fallo: reintenta el dictado una vez
+PV.fallosSR=0; pvIncompatible('el iPhone no deja usar el micrófono para dictar y verificar la voz a la vez'); setTimeout(function(){ if(!micOn) micIniciar(); },500); return true;
+}
+function pvVigilarConflicto(){ PV.fallosSR=0; }
+/* ===== HUELLA DE VOZ PROPIA (plan B, sin cuentas): modelo ONNX de locutor que corre en el teléfono =====
+   Captura el micrófono con la Web Audio API, lo baja a 16 kHz, calcula fbank (igual que sherpa-onnx) y pasa
+   ventanas de 3 s por un modelo ERes2Net (3D-Speaker). El vector resultante se compara con la huella de Keyner.
+   Alimenta el mismo estado PV (scores, frames, activo) para que vozAutorizada() funcione igual que con Picovoice. */
+var VZ={ ort:null, sesion:null, listo:false, preparando:null, stream:null, nodo:null, fuente:null, procesador:null, anillo:null, pos:0, lleno:false, re:null, timer:null, ocupado:false, enrolando:false, embs:[], perfil:null, ruido:0.004, ms:0, error:'', ultTick:0 };
+var VZ_CFG={ sr:16000, nMels:80, frameLen:400, frameShift:160, nfft:512, lowFreq:20, highFreq:7600, preemph:0.97, ventanaSeg:3, pasoMs:1500, anilloSeg:8 };
+function vzBase(){ var u=location.href.split('#')[0].split('?')[0]; return u.slice(0,u.lastIndexOf('/')+1); }
+function vzUrls(){ var b=vzBase(); return {
+  ort:[{js:b+'ort.wasm.min.js',wasm:b},{js:'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/ort.wasm.min.js',wasm:'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.30.0/dist/'},{js:'https://unpkg.com/onnxruntime-web@1.30.0/dist/ort.wasm.min.js',wasm:'https://unpkg.com/onnxruntime-web@1.30.0/dist/'}],
+  modelo:[b+'voz-modelo.part1',b+'voz-modelo.part2'] }; }
+VZ.perfil=(function(){ try{ var b=localStorage.getItem('vz_perfil'); if(!b) return null; var s=atob(b), u=new Uint8Array(s.length); for(var i=0;i<s.length;i++) u[i]=s.charCodeAt(i); return new Float32Array(u.buffer); }catch(e){ return null; } })();
+function vzGuardaPerfil(v){ VZ.perfil=v; try{ if(!v){ localStorage.removeItem('vz_perfil'); return; } var u=new Uint8Array(v.buffer), s=''; for(var i=0;i<u.length;i++) s+=String.fromCharCode(u[i]); localStorage.setItem('vz_perfil',btoa(s)); }catch(e){} }
+
+/* ---------- fbank Kaldi (snip_edges=false, Povey, 80 mel 20-7600 Hz, log, media por banda) ---------- */
+var VZF={ mel:null, ventana:null, cos:null, sin:null, rev:null };
+function vzPrepFbank(){
+var c=VZ_CFG, N=c.frameLen, nfft=c.nfft, nb=nfft/2;
+VZF.ventana=new Float32Array(N); for(var i=0;i<N;i++) VZF.ventana[i]=Math.pow(0.5-0.5*Math.cos(2*Math.PI*i/(N-1)),0.85);
+var melLo=1127*Math.log(1+c.lowFreq/700), melHi=1127*Math.log(1+c.highFreq/700), delta=(melHi-melLo)/(c.nMels+1), binW=c.sr/nfft;
+VZF.mel=[];
+for(var b=0;b<c.nMels;b++){ var l=melLo+b*delta, ce=l+delta, r=l+2*delta, ini=-1, pesos=[];
+for(var k=0;k<nb;k++){ var m=1127*Math.log(1+(k*binW)/700), w=0; if(m>l&&m<r) w=m<=ce?(m-l)/(ce-l):(r-m)/(r-ce); if(w>0){ if(ini<0) ini=k; pesos.push(w); } else if(ini>=0) break; }
+VZF.mel.push({ini:ini,pesos:new Float32Array(pesos)}); }
+VZF.cos=new Float32Array(nfft/2); VZF.sin=new Float32Array(nfft/2);
+for(var j=0;j<nfft/2;j++){ VZF.cos[j]=Math.cos(2*Math.PI*j/nfft); VZF.sin[j]=-Math.sin(2*Math.PI*j/nfft); }
+VZF.rev=new Uint16Array(nfft); var bits=Math.round(Math.log(nfft)/Math.LN2);
+for(var x=0;x<nfft;x++){ var y=0; for(var q=0;q<bits;q++) y=(y<<1)|((x>>q)&1); VZF.rev[x]=y; }
+}
+function vzFft(re,im){
+var n=re.length;
+for(var i=0;i<n;i++){ var j=VZF.rev[i]; if(j>i){ var t=re[i]; re[i]=re[j]; re[j]=t; t=im[i]; im[i]=im[j]; im[j]=t; } }
+for(var len=2;len<=n;len<<=1){ var paso=n/len, mitad=len>>1;
+for(var s=0;s<n;s+=len){ for(var k=0,idx=0;k<mitad;k++,idx+=paso){ var wr=VZF.cos[idx], wi=VZF.sin[idx], a=s+k, b=a+mitad; var xr=re[b]*wr-im[b]*wi, xi=re[b]*wi+im[b]*wr; re[b]=re[a]-xr; im[b]=im[a]-xi; re[a]+=xr; im[a]+=xi; } } }
+}
+function vzFbank(x){
+if(!VZF.mel) vzPrepFbank();
+var c=VZ_CFG, N=x.length, L=c.frameLen, S=c.frameShift, nfft=c.nfft, T=Math.floor((N+S/2)/S);
+if(T<=0) return null;
+var out=new Float32Array(T*c.nMels), re=new Float32Array(nfft), im=new Float32Array(nfft), fr=new Float32Array(L), EPS=1.1920928955078125e-7, media=new Float32Array(c.nMels);
+for(var t=0;t<T;t++){
+var ini=t*S+(S>>1)-(L>>1);
+for(var i=0;i<L;i++){ var p=ini+i; while(p<0||p>=N){ p=p<0?-p-1:2*N-1-p; } fr[i]=x[p]; }
+var dc=0; for(i=0;i<L;i++) dc+=fr[i]; dc/=L; for(i=0;i<L;i++) fr[i]-=dc;
+for(i=L-1;i>0;i--) fr[i]-=c.preemph*fr[i-1]; fr[0]-=c.preemph*fr[0];
+for(i=0;i<nfft;i++){ re[i]=i<L?fr[i]*VZF.ventana[i]:0; im[i]=0; }
+vzFft(re,im);
+for(var b=0;b<c.nMels;b++){ var m=VZF.mel[b], e=0; for(var k=0;k<m.pesos.length;k++){ var q=m.ini+k; e+=m.pesos[k]*(re[q]*re[q]+im[q]*im[q]); } var v=Math.log(Math.max(e,EPS)); out[t*c.nMels+b]=v; media[b]+=v; }
+}
+for(b=0;b<c.nMels;b++) media[b]/=T;
+for(t=0;t<T;t++) for(b=0;b<c.nMels;b++) out[t*c.nMels+b]-=media[b];
+return {datos:out,T:T};
+}
+
+/* ---------- remuestreo a 16 kHz (pasabajos FIR + interpolación lineal) ---------- */
+function vzRemuestreador(srIn,srOut){
+var ratio=srIn/srOut, taps=srIn>srOut?Math.max(15,2*Math.round(8*ratio)+1):1, h=new Float32Array(taps), fc=Math.min(0.45,0.44/ratio), mid=(taps-1)/2, suma=0;
+for(var i=0;i<taps;i++){ var n=i-mid, w=0.54-0.46*Math.cos(2*Math.PI*i/(taps-1)); h[i]=(n===0?2*fc:Math.sin(2*Math.PI*fc*n)/(Math.PI*n))*w; suma+=h[i]; }
+for(i=0;i<taps;i++) h[i]/=suma;
+var cola=new Float32Array(taps-1), fase=0, ultimo=0;
+return function(x){
+if(ratio===1) return x;
+var n=x.length, buf=new Float32Array(cola.length+n); buf.set(cola); buf.set(x,cola.length);
+var ext=new Float32Array(n+1); ext[0]=ultimo;                       // ext[0] = última muestra filtrada del bloque anterior
+for(i=0;i<n;i++){ var acc=0; for(var k=0;k<taps;k++) acc+=h[k]*buf[i+k]; ext[i+1]=acc; }
+cola.set(buf.subarray(buf.length-cola.length)); ultimo=ext[n];
+var out=[], t=fase+1;                                               // posición dentro de ext (1 = primera muestra de este bloque)
+while(t<n){ var i0=Math.floor(t), fr=t-i0; out.push(ext[i0]+(ext[i0+1]-ext[i0])*fr); t+=ratio; }
+fase=t-1-n;                                                         // queda en [-1, ratio-1): relativa al próximo bloque
+return Float32Array.from(out);
+};
+}
+
+/* ---------- carga de ORT y del modelo ---------- */
+function vzScript(url){ return new Promise(function(ok,fail){ var s=document.createElement('script'), fin=false, t=setTimeout(function(){ if(!fin){ fin=true; try{ s.remove(); }catch(e){} fail(new Error('tardó demasiado '+url)); } },25000); s.src=url; s.onload=function(){ if(!fin){ fin=true; clearTimeout(t); ok(); } }; s.onerror=function(){ if(!fin){ fin=true; clearTimeout(t); try{ s.remove(); }catch(e){} fail(new Error('no cargó '+url)); } }; document.head.appendChild(s); }); }
+function vzCargarOrt(){
+if(window.ort) return Promise.resolve(window.ort);
+var lista=vzUrls().ort, i=0;
+function intenta(){ if(i>=lista.length) return Promise.reject(new Error('No pude cargar onnxruntime')); var u=lista[i++]; return vzScript(u.js).then(function(){ window.ort.env.wasm.wasmPaths=u.wasm; window.ort.env.wasm.numThreads=1; return window.ort; }).catch(function(){ return intenta(); }); }
+return intenta();
+}
+function vzIdb(modo,clave,valor){ return new Promise(function(ok){ try{ var r=indexedDB.open('jarvis-voz',1); r.onupgradeneeded=function(){ r.result.createObjectStore('f'); }; r.onerror=function(){ ok(null); };
+r.onsuccess=function(){ var db=r.result, tx=db.transaction('f',modo==='w'?'readwrite':'readonly'), st=tx.objectStore('f'); var q=modo==='w'?st.put(valor,clave):st.get(clave); q.onsuccess=function(){ ok(modo==='w'?true:q.result||null); }; q.onerror=function(){ ok(null); }; }; }catch(e){ ok(null); } }); }
+function vzBytesModelo(avisa){
+return vzIdb('r','modelo-v1').then(function(b){ if(b&&b.byteLength>1000000) return new Uint8Array(b);
+var partes=vzUrls().modelo, bufs=[], total=0, cadena=Promise.resolve();
+partes.forEach(function(u,i){ cadena=cadena.then(function(){ if(avisa) avisa('Descargando el modelo de voz… '+(i+1)+'/'+partes.length); return fetch(u,{cache:'force-cache'}).then(function(r){ if(!r.ok) throw new Error('No encontré '+u.split('/').pop()+' (HTTP '+r.status+'). Súbelo al repositorio.'); return r.arrayBuffer(); }).then(function(ab){ bufs.push(ab); total+=ab.byteLength; }); }); });
+return cadena.then(function(){ var out=new Uint8Array(total), off=0; bufs.forEach(function(ab){ out.set(new Uint8Array(ab),off); off+=ab.byteLength; }); vzIdb('w','modelo-v1',out.buffer); return out; }); });
+}
+function vzPreparar(){
+if(VZ.listo) return Promise.resolve(true);
+if(VZ.preparando) return VZ.preparando;
+VZ.error='';
+VZ.preparando=vzCargarOrt().then(function(ort){ VZ.ort=ort; pvEstado('Cargando el motor de voz…'); return vzBytesModelo(function(t){ pvEstado(t); }); })
+.then(function(bytes){ pvEstado('Preparando el modelo de voz…'); var ort=VZ.ort; ort.env.wasm.proxy=true;
+return ort.InferenceSession.create(bytes,{executionProviders:['wasm']}).catch(function(){ ort.env.wasm.proxy=false; return ort.InferenceSession.create(bytes,{executionProviders:['wasm']}); }); })
+.then(function(s){ VZ.sesion=s; VZ.listo=true; VZ.preparando=null; vzPrepFbank(); pvEstado(); return true; })
+.catch(function(e){ VZ.preparando=null; VZ.error=(e&&e.message)||String(e); PV.error=VZ.error; pvEstado(); throw e; });
+return VZ.preparando;
+}
+function vzEmbed(audio){
+var s=VZ.sesion, f=vzFbank(audio); if(!s||!f) return Promise.resolve(null);
+var feed={}; feed[s.inputNames[0]]=new VZ.ort.Tensor('float32',f.datos,[1,f.T,VZ_CFG.nMels]);
+var t0=Date.now();
+return s.run(feed).then(function(res){ var o=res[s.outputNames[0]].data, n=0; for(var i=0;i<o.length;i++) n+=o[i]*o[i]; n=Math.sqrt(n)||1; var v=new Float32Array(o.length); for(i=0;i<o.length;i++) v[i]=o[i]/n; VZ.ms=Date.now()-t0; return v; });
+}
+function vzCos(a,b){ if(!a||!b||a.length!==b.length) return 0; var s=0; for(var i=0;i<a.length;i++) s+=a[i]*b[i]; return s; }
+
+/* ---------- captura del micrófono ---------- */
+function vzMeter(x){ var a=VZ.anillo, n=a.length; for(var i=0;i<x.length;i++){ a[VZ.pos]=x[i]; VZ.pos++; if(VZ.pos>=n){ VZ.pos=0; VZ.lleno=true; } } PV.frames++; PV.ultFrame=Date.now(); }
+function vzUltimos(seg){ var a=VZ.anillo, n=a.length, m=Math.min(n,Math.round(seg*VZ_CFG.sr)); if(!VZ.lleno&&VZ.pos<m) m=VZ.pos; var out=new Float32Array(m); var ini=(VZ.pos-m+n)%n; for(var i=0;i<m;i++) out[i]=a[(ini+i)%n]; return out; }
+function vzVoz(x){ /* fracción de tramos de 20 ms con energía por encima del ruido de fondo */ var L=320, tot=0, con=0, minimo=1; for(var i=0;i+L<=x.length;i+=L){ var e=0; for(var k=0;k<L;k++) e+=x[i+k]*x[i+k]; e=Math.sqrt(e/L); tot++; if(e<minimo) minimo=e; if(e>Math.max(VZ.ruido*3,0.006)) con++; } if(minimo<1) VZ.ruido=0.9*VZ.ruido+0.1*Math.max(minimo,0.0005); return tot?con/tot:0; }
+function vzCaptura(){
+if(VZ.stream) return Promise.resolve(true);
+if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia) return Promise.reject(new Error('Este navegador no deja capturar el micrófono'));
+return navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}}).then(function(stream){
+VZ.stream=stream;
+actx=actx||new (window.AudioContext||window.webkitAudioContext)(); if(actx.state==='suspended') actx.resume().catch(function(){});
+VZ.re=vzRemuestreador(actx.sampleRate,VZ_CFG.sr); VZ.anillo=new Float32Array(VZ_CFG.sr*VZ_CFG.anilloSeg); VZ.pos=0; VZ.lleno=false;
+VZ.fuente=actx.createMediaStreamSource(stream);
+var usaWorklet=!!(actx.audioWorklet&&window.AudioWorkletNode);
+var listo=usaWorklet?actx.audioWorklet.addModule(URL.createObjectURL(new Blob(["class C extends AudioWorkletProcessor{process(i){var c=i[0]&&i[0][0];if(c)this.port.postMessage(c.slice(0));return true;}}registerProcessor('vz-captura',C);"],{type:'application/javascript'}))).then(function(){ VZ.nodo=new AudioWorkletNode(actx,'vz-captura'); VZ.nodo.port.onmessage=function(e){ vzMeter(VZ.re(e.data)); }; VZ.fuente.connect(VZ.nodo); }):Promise.reject(new Error('sin worklet'));
+return listo.catch(function(){ /* respaldo: ScriptProcessor */ VZ.procesador=actx.createScriptProcessor(4096,1,1); VZ.procesador.onaudioprocess=function(e){ vzMeter(VZ.re(e.inputBuffer.getChannelData(0).slice(0))); }; VZ.fuente.connect(VZ.procesador); VZ.procesador.connect(actx.destination); });
+}).then(function(){ return true; });
+}
+function vzParar(){ clearInterval(VZ.timer); VZ.timer=null; try{ if(VZ.nodo){ VZ.nodo.port.onmessage=null; VZ.nodo.disconnect(); } }catch(e){} try{ if(VZ.procesador){ VZ.procesador.disconnect(); VZ.procesador.onaudioprocess=null; } }catch(e){} try{ if(VZ.fuente) VZ.fuente.disconnect(); }catch(e){} try{ if(VZ.stream) VZ.stream.getTracks().forEach(function(t){ t.stop(); }); }catch(e){} VZ.stream=null; VZ.nodo=null; VZ.procesador=null; VZ.fuente=null; VZ.ocupado=false; }
+
+/* ---------- verificación continua ---------- */
+function vzIniciar(){
+if(!VZ.listo||!VZ.perfil) return Promise.resolve(false);
+return vzCaptura().then(function(){
+clearInterval(VZ.timer); PV.scores=[]; PV.frames=0; PV.ultFrame=0;
+VZ.timer=setInterval(function(){
+if(VZ.ocupado||VZ.enrolando||!VZ.stream) return;
+if(hablandoAhora()) return;                                   // mientras Jarvis habla no se juzga (sería su propio eco)
+var x=vzUltimos(VZ_CFG.ventanaSeg); if(x.length<VZ_CFG.sr*1.2) return;
+var voz=vzVoz(x); if(voz<0.25) return;                        // sin voz suficiente en la ventana
+VZ.ocupado=true;
+vzEmbed(x).then(function(v){ VZ.ocupado=false; if(!v) return; var sc=vzCos(v,VZ.perfil); PV.scores.push({t:Date.now(),s:sc}); PV.ultVoz=Date.now(); if(PV.scores.length>600) PV.scores.splice(0,300);
+if(PV.probando) pvEstado('Probando · ahora mismo: '+Math.round(sc*100)+' % parecido a tu voz (exigencia '+Math.round(pvUmbral()*100)+' %) · '+VZ.ms+' ms'); }).catch(function(e){ VZ.ocupado=false; VZ.error=(e&&e.message)||String(e); });
+},VZ_CFG.pasoMs);
+return true;
+});
+}
+
+/* ---------- enrolar: lee el texto ~30 s; se promedian las ventanas con voz ---------- */
+function vzEnrolar(){
+if(VZ.enrolando) return;
+if(!VZ.listo){ pvEstado('Preparando (la primera vez descarga el modelo, ~26 MB)…'); vzPreparar().then(function(){ pvEstado('Listo. Toca "Grabar mi voz" otra vez y empieza a leer el texto en voz alta.'); }).catch(function(e){ pvEstado('No pude preparar el motor de voz: '+((e&&e.message)||e)); }); return; }
+VZ.enrolando=true; PV.enrolando=true; VZ.embs=[]; clearInterval(VZ.timer); VZ.timer=null; PV.activo=false; pvPausar(); callar();
+if(rec){ micOn=false; try{ rec.abort(); }catch(_){} rec=null; }
+var tx=$('pv-texto'); if(tx){ tx.hidden=false; tx.textContent=PV_TEXTO; }
+var META=10, vigia=null, ultimoCorte=0;
+function termina(msg){ clearTimeout(vigia); clearInterval(VZ.timer); VZ.timer=null; VZ.enrolando=false; PV.enrolando=false; vzParar(); if(tx) tx.hidden=true; pvEstado(msg); setTimeout(function(){ if(!micOn) micIniciar(); pvPedirToque(); },600); }
+vzCaptura().then(function(){
+pvEstado('Grabando tu voz… 0 % · lea el texto en voz alta');
+VZ.timer=setInterval(function(){
+if(VZ.ocupado||!VZ.enrolando) return;
+if(Date.now()-ultimoCorte<2200) return;
+var x=vzUltimos(VZ_CFG.ventanaSeg); if(x.length<VZ_CFG.sr*2.5) return;
+if(vzVoz(x)<0.45) return;                                     // solo ventanas bien habladas
+ultimoCorte=Date.now(); VZ.ocupado=true;
+vzEmbed(x).then(function(v){ VZ.ocupado=false; if(!v||!VZ.enrolando) return; VZ.embs.push(v);
+var pct=Math.min(100,Math.round(VZ.embs.length/META*100)); pvEstado('Grabando tu voz… '+pct+' %'+(pct<100?' · siga leyendo':''));
+if(VZ.embs.length>=META){
+var dim=v.length, prom=new Float32Array(dim); VZ.embs.forEach(function(e){ for(var i=0;i<dim;i++) prom[i]+=e[i]; });
+var n=0; for(var i=0;i<dim;i++) n+=prom[i]*prom[i]; n=Math.sqrt(n)||1; for(i=0;i<dim;i++) prom[i]/=n;
+var cons=0; VZ.embs.forEach(function(e){ cons+=vzCos(e,prom); }); cons/=VZ.embs.length;
+vzGuardaPerfil(prom); PV.perfil='onnx'; pvLs('pv_perfil','onnx');
+termina('Voz guardada (consistencia '+Math.round(cons*100)+' %). Desde ahora solo te responde a ti. Toca la pantalla para activarlo y usa "Probar" para verlo en vivo.');
+} }).catch(function(e){ VZ.ocupado=false; termina('No pude grabar: '+((e&&e.message)||e)); });
+},400);
+}).catch(function(e){ termina('No pude abrir el micrófono para grabar: '+((e&&e.message)||e)); });
+vigia=setTimeout(function(){ if(VZ.enrolando) termina('Se agotó el tiempo ('+VZ.embs.length+' de '+META+' muestras). Busque un sitio silencioso, hable más cerca y vuelva a intentar.'); },180000);
+}
+if(pvHayHuella()&&st.soloMiVoz!==false&&!PV.incompat) setTimeout(function(){ pvPreparar().catch(function(){}); },1500);   // deja todo listo para el primer toque
 var wl=null, ocultoEn=0;
 window.__auth=false;
 function pideWake(){ if(st.despierta===false||!navigator.wakeLock||document.hidden) return;
@@ -1920,7 +2274,7 @@ navigator.wakeLock.request('screen').then(function(s){ wl=s; s.addEventListener(
 function soltarWake(){ if(wl){ try{ wl.release(); }catch(e){} wl=null; } }
 document.addEventListener('visibilitychange',function(){
 if(window.__auth) return;                       // el cuadro de Face ID no cuenta como salir
-if(document.hidden){ ocultoEn=Date.now();
+if(document.hidden){ ocultoEn=Date.now(); pvPausar();
 if(rec){ micOn=false; try{rec.abort();}catch(_){} rec=null; }
 HOLO.cerrar();
 soltarWake(); micEstado('En pausa','off');
@@ -1934,6 +2288,7 @@ if(ocupado||creOcupado){ PETICION++; ocupado=false; creOcupado=false; pendiente=
 if(rec){ try{ rec.abort(); }catch(_){} rec=null; } micOn=false;
 if($('c-salud') && $('c-salud').open) HOLO.abrir();
 if(Date.now()-ultTasas>30*60000){ ultTasas=Date.now(); google.script.run.withSuccessHandler(function(t){ aplicaTasas(t); }).tasas(); }
+pvIniciar();
 if(Date.now()-ocultoEn<2500){ document.body.classList.remove('cerrado'); if(!micOn) micIniciar(); return; }
 if(document.body.classList.contains('cerrado')){ document.body.classList.remove('cerrado'); volverConCara(); return; }
 setTimeout(function(){ if(!micOn) micIniciar(); if(!micOn) micEstado('Toca la pantalla para volver a escuchar','off'); },300);
@@ -1969,8 +2324,17 @@ esp.addEventListener('input',function(){ var v=parseFloat(esp.value); st.espera=
 var dsp=$('despierta'); dsp.checked=st.despierta!==false;
 dsp.addEventListener('change',function(){ st.despierta=dsp.checked; save(); if(dsp.checked) pideWake(); else soltarWake(); });
 var cl=$('clave'); cl.value=st.clave||''; cl.addEventListener('input',function(){ st.clave=cl.value.trim(); save(); micListo(); });
-if(!st.libreV2){ st.libre=false; st.libreV2=1; save(); }   /* por defecto responde solo si le dicen "Jarvis": así la TV y las conversaciones no se cuelan */
+if(!st.libreV2){ st.libre=false; st.libreV2=1; save(); }
+if(!st.libreV3){ st.libre=true; st.libreV3=1; if(st.seguir===''||st.seguir===undefined||+st.seguir<=10) st.seguir=45; save(); }   /* modo conversación: responde sin decir "Jarvis" y sigue atento 45 s después de cada respuesta */
 var sc=$('sinclave'); sc.checked=st.libre!==false; sc.addEventListener('change',function(){ st.libre=sc.checked; save(); micListo(); });
+/* Solo mi voz (Picovoice) */
+var pk=$('pvkey'); pk.value=PV.key; pk.addEventListener('change',function(){ PV.key=pk.value.trim(); pvLs('pv_key',PV.key||null); pvPausar(); PV.eagle=null; PV.profiler=null; PV.error=''; PV.incompat=false; pvLs('pv_incompat',null); pvEstado(); if(pvHayHuella()) pvPreparar().then(function(){ pvPedirToque(); }).catch(function(){}); });
+var ps=$('pvsolo'); ps.checked=st.soloMiVoz!==false; ps.addEventListener('change',function(){ st.soloMiVoz=ps.checked; save(); if(ps.checked){ pvIniciar(); } else { pvPausar(); pvEstado(); micListo(); } });
+var pu=$('pvumbral'); pu.value=(st.pvUmbral!==undefined&&st.pvUmbral!=='')?st.pvUmbral:''; pu.addEventListener('input',function(){ var v=parseFloat(pu.value); st.pvUmbral=isNaN(v)?'':v; save(); });
+$('pv-grabar').addEventListener('click',function(){ if(PV.incompat){ PV.incompat=false; pvLs('pv_incompat',null); PV.error=''; } pvEnrolar(); });
+$('pv-olvidar').addEventListener('click',function(){ PV.perfil=null; pvLs('pv_perfil',null); vzGuardaPerfil(null); pvPausar(); pvEstado(); micListo(); });
+$('pv-probar').addEventListener('click',function(){ if(!pvHayHuella()){ pvEstado(); return; } if(PV.incompat){ PV.incompat=false; pvLs('pv_incompat',null); PV.error=''; } PV.probando=!PV.probando; this.textContent=PV.probando?'Dejar de probar':'Probar'; if(PV.probando){ pvEstado('Probando · habla y mira el porcentaje'); if(!PV.activo) pvIniciar(); } else pvEstado(); });
+pvEstado();
 if(st.espera===2.2||st.espera==='2.2'){ st.espera=''; esp.value=''; }
 setTimeout(function(){ try{ google.script.run.calentar(); }catch(e){} },2500);   // deja listo Novax para la primera pregunta
 function volverConCara(){
@@ -2020,7 +2384,7 @@ var bt=$('boot');
 var pideCod=!!st.codigoHash;
 var saludado=false;
 function arrancarVoz(){
-pideWake(); micIniciar();
+pideWake(); pvIniciar().then(function(ok){ if(ok) pvVigilarConflicto(); }); micIniciar();
 if(pideCod){
 modoCodigo=true; document.body.classList.add('velado');
 micEstado('Esperando el código','escucha');
