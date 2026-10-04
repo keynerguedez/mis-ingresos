@@ -1314,6 +1314,20 @@ return Array.prototype.map.call(new Uint8Array(b),function(x){ return ('0'+x.toS
 function toca_saludar(){ var u=0; try{ u=+localStorage.getItem('ult_saludo')||0; }catch(e){} return Date.now()-u>3600000; }
 function marca_saludo(){ try{ localStorage.setItem('ult_saludo',String(Date.now())); }catch(e){} }
 function saludoCorto(){ return [saludoHora()+'.','¿En qué puedo ayudarle hoy, señor?']; }
+/* Lo que Jarvis vio en la empresa y aún no ha comentado: lo dice al saludar, sin que se lo pidan (como el administrador al verlo llegar). */
+var novedadesPedidas=0;
+function comentarNovedades(){
+if(Date.now()-novedadesPedidas<60000) return; novedadesPedidas=Date.now();
+try{
+google.script.run.withSuccessHandler(function(n){
+if(!n||!n.hay||!n.texto) return;
+chatAdd('assistant',n.texto); CHAT.push({r:'assistant',t:n.texto,ts:Date.now()}); guardaChat();
+if(n.items&&n.items.length) holoMostrar([{tipo:'lista',titulo:'Le quería comentar',items:n.items}],'Jarvis');
+hablar(frases(n.texto),true);                    // en cola: después del saludo
+atento=Math.max(atento,Date.now()+ventana());
+}).withFailureHandler(function(){}).novedades();
+}catch(e){}
+}
 function saludoHora(){ var h=new Date().getHours(); return h<12?'Buenos días':h<19?'Buenas tardes':'Buenas noches'; }
 function hablandoAhora(){ return (window.speechSynthesis&&speechSynthesis.speaking)||Date.now()-finVoz<700; }
 function norm(t){ return String(t).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,''); }
@@ -1874,7 +1888,7 @@ Promise.all(cands.map(hashCodigo)).then(function(hs){
 if(hs.indexOf(st.codigoHash)>=0){
 modoCodigo=false; intentos=0; $('boot').classList.add('off'); document.body.classList.remove('velado');
 if(toca_saludar()){ marca_saludo(); hablar(['Acceso concedido.'].concat(saludoCorto())); } else hablar([alAzar(['Adelante, señor.','Listo, señor.','Aquí estoy.'])]);
-micListo();
+micListo(); comentarNovedades();
 } else {
 intentos++;
 var d=soloDigitos(txt);
@@ -2166,12 +2180,14 @@ return Float32Array.from(out);
 
 /* ---------- carga de ORT y del modelo ---------- */
 function vzScript(url){ return new Promise(function(ok,fail){ var s=document.createElement('script'), fin=false, t=setTimeout(function(){ if(!fin){ fin=true; try{ s.remove(); }catch(e){} fail(new Error('tardó demasiado '+url)); } },25000); s.src=url; s.onload=function(){ if(!fin){ fin=true; clearTimeout(t); ok(); } }; s.onerror=function(){ if(!fin){ fin=true; clearTimeout(t); try{ s.remove(); }catch(e){} fail(new Error('no cargó '+url)); } }; document.head.appendChild(s); }); }
-function vzCargarOrt(){
-if(window.ort) return Promise.resolve(window.ort);
-var lista=vzUrls().ort, i=0;
-function intenta(){ if(i>=lista.length) return Promise.reject(new Error('No pude cargar onnxruntime')); var u=lista[i++]; return vzScript(u.js).then(function(){ window.ort.env.wasm.wasmPaths=u.wasm; window.ort.env.wasm.numThreads=1; return window.ort; }).catch(function(){ return intenta(); }); }
-return intenta();
+/* Carga UNA fuente de onnxruntime (misma carpeta del repositorio o un CDN). Siempre vuelve a ejecutar el script:
+   cada ejecución crea un `ort` nuevo, y hace falta porque un `ort` cuyo arranque falló queda inservible
+   ("previous call to 'initWasm()' failed"), así que no se puede reintentar con el mismo. */
+function vzCargarOrt(u,proxy){
+try{ window.ort=undefined; }catch(e){}
+return vzScript(u.js).then(function(){ var ort=window.ort; if(!ort||!ort.InferenceSession) throw new Error('onnxruntime vacío en '+u.js); ort.env.wasm.wasmPaths=u.wasm; ort.env.wasm.numThreads=1; ort.env.wasm.proxy=!!proxy; return ort; });
 }
+function vzConTiempo(p,ms,msg){ return new Promise(function(ok,fail){ var t=setTimeout(function(){ fail(new Error(msg)); },ms); p.then(function(v){ clearTimeout(t); ok(v); },function(e){ clearTimeout(t); fail(e); }); }); }
 function vzIdb(modo,clave,valor){ return new Promise(function(ok){ try{ var r=indexedDB.open('jarvis-voz',1); r.onupgradeneeded=function(){ r.result.createObjectStore('f'); }; r.onerror=function(){ ok(null); };
 r.onsuccess=function(){ var db=r.result, tx=db.transaction('f',modo==='w'?'readwrite':'readonly'), st=tx.objectStore('f'); var q=modo==='w'?st.put(valor,clave):st.get(clave); q.onsuccess=function(){ ok(modo==='w'?true:q.result||null); }; q.onerror=function(){ ok(null); }; }; }catch(e){ ok(null); } }); }
 function vzBytesModelo(avisa){
@@ -2184,9 +2200,28 @@ function vzPreparar(){
 if(VZ.listo) return Promise.resolve(true);
 if(VZ.preparando) return VZ.preparando;
 VZ.error='';
-VZ.preparando=vzCargarOrt().then(function(ort){ VZ.ort=ort; pvEstado('Cargando el motor de voz…'); return vzBytesModelo(function(t){ pvEstado(t); }); })
-.then(function(bytes){ pvEstado('Preparando el modelo de voz…'); var ort=VZ.ort; ort.env.wasm.proxy=true;
-return ort.InferenceSession.create(bytes,{executionProviders:['wasm']}).catch(function(){ ort.env.wasm.proxy=false; return ort.InferenceSession.create(bytes,{executionProviders:['wasm']}); }); })
+/* Intentos, en orden: cada fuente (misma carpeta → jsDelivr → unpkg) primero con el motor en un worker
+   (proxy, no traba la pantalla) y luego sin worker. Así la página sigue funcionando aunque en el repositorio
+   falte o esté mal servido algún archivo de onnxruntime (.js/.mjs/.wasm): se pasa al CDN. Si lo que falta es
+   el modelo (voz-modelo.part1/2), se avisa de inmediato: eso no lo arregla ningún CDN. */
+var fuentes=vzUrls().ort, intentos=[], bytes=null, fallos=[];
+fuentes.forEach(function(u,i){ var nombre=i===0?'misma carpeta':u.js.replace(/^https?:\/\//,'').split('/')[0]; intentos.push({u:u,proxy:true,nombre:nombre}); intentos.push({u:u,proxy:false,nombre:nombre+' sin worker'}); });
+function intenta(i){
+if(i>=intentos.length) return Promise.reject(new Error('No pude arrancar el motor de voz. '+fallos.join(' · ')));
+var it=intentos[i];
+pvEstado('Cargando el motor de voz…'+(i?' ('+it.nombre+')':''));
+return vzCargarOrt(it.u,it.proxy).then(function(ort){
+VZ.ort=ort;
+return (bytes?Promise.resolve(bytes):vzBytesModelo(function(t){ pvEstado(t); })).then(function(b){ bytes=b; pvEstado('Preparando el modelo de voz…'+(i?' ('+it.nombre+')':''));
+return vzConTiempo(ort.InferenceSession.create(b,{executionProviders:['wasm']}),90000,'tardó demasiado en preparar el modelo'); });
+}).then(function(s){ VZ.fuente_ort=it.nombre; return s; },function(e){
+var m=(e&&e.message)||String(e);
+if(/No encontré/.test(m)) throw e;
+fallos.push(it.nombre+': '+m.slice(0,90));
+return intenta(i+1);
+});
+}
+VZ.preparando=intenta(0)
 .then(function(s){ VZ.sesion=s; VZ.listo=true; VZ.preparando=null; vzPrepFbank(); pvEstado(); return true; })
 .catch(function(e){ VZ.preparando=null; VZ.error=(e&&e.message)||String(e); PV.error=VZ.error; pvEstado(); throw e; });
 return VZ.preparando;
@@ -2390,7 +2425,7 @@ modoCodigo=true; document.body.classList.add('velado');
 micEstado('Esperando el código','escucha');
 var SIN_SALUDO=false; try{ SIN_SALUDO=sessionStorage.getItem('reinicio')==='1'; sessionStorage.removeItem('reinicio'); }catch(e){}
 if(st.voz!==false && !saludado){ saludado=true; hablar(SIN_SALUDO?['Sistema reiniciado. Dígame su código.']:(toca_saludar()?[saludoHora()+', señor. Dígame su código.']:['Su código, señor.'])); }
-} else if(st.voz!==false && !saludado){ saludado=true; if(SIN_SALUDO) hablar(['Sistema reiniciado.']); else if(toca_saludar()){ marca_saludo(); hablar(saludoCorto()); } }
+} else if(st.voz!==false && !saludado){ saludado=true; if(SIN_SALUDO) hablar(['Sistema reiniciado.']); else if(toca_saludar()){ marca_saludo(); hablar(saludoCorto()); } comentarNovedades(); }
 }
 function pedirToque(){ var av=$('toque'); if(av) av.hidden=true; }
 window.__hablo=false;
