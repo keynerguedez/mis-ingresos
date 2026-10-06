@@ -1455,6 +1455,7 @@ if(/^escane/.test(cmd)){ abreCierra('c-salud',true); setTimeout(function(){ HOLO
 if(/^resumen/.test(cmd)){ hablar(SAL); return; }
 }
 function separaAcciones(t){
+t=String(t).replace(/[ \t]*ACCION\s*:/g,'\nACCION:');   // la IA a veces la pega al final de una frase: se separa igual
 var acc=[], limpio=String(t).replace(/^\s*ACCION\s*:\s*(.+)$/gim,function(_,c){ acc.push(c); return ''; });
 return {texto:limpio.replace(/\n{2,}/g,'\n').trim(), acciones:acc};
 }
